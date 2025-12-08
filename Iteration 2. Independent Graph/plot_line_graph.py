@@ -13,39 +13,44 @@ import pandas as pd
 class LineGraph:
     def __init__(self, ticker):
         self.ticker = ticker.upper()
-        self.start_date = "2000-01-01" # Will be as late as possible
+        self.start_date = "2000-01-01" # Will be as early as possible
         self.end_date = "2025-01-12"
         self.data_dir = "stock_data_cache"
-        self.close_data = None
+        self.close_data = self.__load_data()
 
-    def load_data(self):
+    def __load_data(self):
         cache_file = os.path.join("stock_data_cache", f"{self.ticker}.csv")
         if os.path.exists(cache_file):
             data = pd.read_csv(cache_file, index_col='Date', parse_dates=True)
-            self.close_data = data["Close"]
-            return
+            print(f"Data loaded from cache for {self.ticker}")
+            return data["Close"]
 
         print(f"Downloading {self.ticker} data...") # temp Debug
         try:
             data = yf.download(self.ticker, start="2000-01-01", end="2025-01-12", progress=False) # dates temp
         except AttributeError:
             print("That ticker does not exist")
-            return
+            return None
         except exception as e:
             print(type(e).__name__, "-", e)
+            return None
         if data.empty:
             print(f"yfinance returned an empty dataset for {self.ticker}.")
-            return
+            return None
 
         if not os.path.exists("stock_data_cache"):
             os.makedirs("stock_data_cache")
 
-        data.to_csv(cache_file)
-        print(f"Data saved to {cache_file}")
-        self.close_data = data["Close"]
-        return
+        data.columns = data.columns.get_level_values(0)
+        data.index.name = 'Date'
+        data_to_save = data.reset_index()
+        data_to_save.to_csv(cache_file, index=False)
 
-    def plot_data(self, data):
+        print(f"Data saved to {cache_file}")
+        return data["Close"]
+
+    def plot_data(self):
+        data = self.close_data
 
         dates_in_seconds = data.index.to_numpy().astype(np.int64) // 10**9
         prices = data.values.astype(float).flatten()
@@ -216,10 +221,9 @@ if __name__ == '__main__':
 
     ticker_input = input("Ticker: ") # Will be taken from box input
     MainGraph = LineGraph(ticker_input)
-    MainGraph.load_data()
 
     while MainGraph.close_data is None:
         ticker_input = input("Ticker: ")
         MainGraph = LineGraph(ticker_input)
 
-    MainGraph.plot_data(MainGraph.close_data)
+    MainGraph.plot_data()

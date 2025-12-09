@@ -73,7 +73,7 @@ class CandlestickGraph:
         except AttributeError:
             print("That ticker does not exist")
             return None
-        except exception as e:
+        except Exception as e:
             print(type(e).__name__, "-", e)
             return None
 

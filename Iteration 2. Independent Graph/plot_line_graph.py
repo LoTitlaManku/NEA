@@ -15,7 +15,6 @@ class LineGraph:
         self.ticker = ticker.upper()
         self.start_date = "2000-01-01" # Will be as early as possible
         self.end_date = "2025-01-12"
-        self.data_dir = "stock_data_cache"
         self.close_data = self.__load_data()
 
     def __load_data(self):
@@ -27,11 +26,11 @@ class LineGraph:
 
         print(f"Downloading {self.ticker} data...") # temp Debug
         try:
-            data = yf.download(self.ticker, start="2000-01-01", end="2025-01-12", progress=False) # dates temp
+            data = yf.download(self.ticker, start="1900-01-01", end=datetime.today().date(), progress=False) # dates temp
         except AttributeError:
             print("That ticker does not exist")
             return None
-        except exception as e:
+        except Exception as e:
             print(type(e).__name__, "-", e)
             return None
         if data.empty:

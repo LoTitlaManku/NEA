@@ -18,7 +18,7 @@ class LineGraph:
         self.close_data = self.__load_data()
 
     def __load_data(self):
-        cache_file = os.path.join("stock_data_cache", f"{self.ticker}.csv")
+        cache_file = os.path.join("stock_data_cache", f"{self.ticker}_hourly.csv")
         if os.path.exists(cache_file):
             data = pd.read_csv(cache_file, index_col='Date', parse_dates=True)
             print(f"Data loaded from cache for {self.ticker}")
@@ -26,7 +26,7 @@ class LineGraph:
 
         print(f"Downloading {self.ticker} data...") # temp Debug
         try:
-            data = yf.download(self.ticker, start="1900-01-01", end=datetime.today().date(), progress=False) # dates temp
+            data = yf.download(self.ticker, period="700d", interval="1h", progress=False) # dates temp
         except AttributeError:
             print("That ticker does not exist")
             return None

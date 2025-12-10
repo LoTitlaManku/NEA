@@ -1,206 +1,98 @@
-import sys
+
 import os
+import sys
+from datetime import datetime
+
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timedelta
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton
 import finplot as fplt
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QFrame, QPushButton
+from pyqtgraph import QtGui
 
 
-class GraphInstance:
+class StockData:
     def __init__(self, ticker: str):
         self.ticker = ticker.upper()
-        self.current_type = "line"
-        self.ax = None
+        self.daily_data = self._load_data("daily")
+        self.hourly_data = self._load_data("hourly")
 
-        # Load all data at once
-        self.daily_data = self.__load_data()
-        self.hourly_data = self.__load_hourly_data()
+    def _load_data(self, timeframe):
+        cache_file = os.path.join("stock_data_cache", f"{self.ticker}_{timeframe}.csv")
 
-        if self.daily_data is None:
-            sys.exit("Could not load daily data.")
-
-    def __load_data(self):
-        cache_file = os.path.join("stock_data_cache", f"{self.ticker}.csv")
         if os.path.exists(cache_file):
-            print(f"Data loaded from cache for {self.ticker}")
-            return pd.read_csv(cache_file, index_col='Date', parse_dates=True)
+            print(f"[CACHE] loaded {self.ticker}:{timeframe}")
+            return pd.read_csv(cache_file, index_col="Date", parse_dates=True)
 
-        print(f"Downloading {self.ticker} daily data...")
+        print(f"[DOWNLOAD] {self.ticker}:{timeframe}")
+
         try:
-            data = yf.download(self.ticker, start="1900-01-01", progress=False, auto_adjust=True)
-            if data.empty:
-                return None
-            if isinstance(data.columns, pd.MultiIndex):
-                data.columns = data.columns.get_level_values(0)
-
-            if not os.path.exists("stock_data_cache"):
-                os.makedirs("stock_data_cache")
-            data.to_csv(cache_file)
-            return data
-        except Exception:
-            return None
-
-    def __load_hourly_data(self):
-        cache_file = os.path.join("stock_data_cache", f"{self.ticker}_hourly.csv")
-        if os.path.exists(cache_file):
-            print(f"Hourly data loaded from cache for {self.ticker}")
-            return pd.read_csv(cache_file, index_col='Date', parse_dates=True)
-
-        print(f"Downloading {self.ticker} hourly data...")
-        try:
-            # period="max" with interval="1h" usually fetches ~730 days
-            data = yf.download(self.ticker, period="max", interval="1h", progress=False, auto_adjust=True)
-            if data.empty:
-                return None
-            if isinstance(data.columns, pd.MultiIndex):
-                data.columns = data.columns.get_level_values(0)
-
-            if not os.path.exists("stock_data_cache"):
-                os.makedirs("stock_data_cache")
-            data.to_csv(cache_file)
-            return data
-        except Exception:
-            return None
-
-    def create_gui(self):
-        print("Creating GUI...")
-
-        # Create QApplication if it doesn't exist
-        if QApplication.instance() is None:
-            self.app = QApplication(sys.argv)
-        else:
-            self.app = QApplication.instance()
-
-        # Initialize FinPlot with dark theme
-        fplt.foreground = '#fff'
-        fplt.background = '#000'
-        fplt.legend_border_color = '#fff'
-        fplt.legend_fill_color = '#000'
-        fplt.candle_bull_color = '#26a69a'
-        fplt.candle_bear_color = '#ef5350'
-
-        self.main_window = QMainWindow()
-        self.main_window.setWindowTitle(f"{self.ticker} Stock Chart")
-        self.main_window.resize(1200, 700)
-
-        main_widget = QWidget()
-        self.main_window.setCentralWidget(main_widget)
-        layout = QVBoxLayout(main_widget)
-
-        # Create container for the graph
-        self.graph_container = QWidget()
-        layout.addWidget(self.graph_container)
-
-        # Create button for toggling graph type
-        self.toggle_button = QPushButton("Switch to Candlestick")
-        self.toggle_button.clicked.connect(self.toggle_graph)
-        layout.addWidget(self.toggle_button)
-
-        # Create initial plot
-        self.create_plot()
-
-        self.main_window.show()
-
-    def create_plot(self):
-        """Create a new plot in the container."""
-        # Clear the graph container
-        layout = self.graph_container.layout()
-        if layout:
-            while layout.count():
-                child = layout.takeAt(0)
-                if child.widget():
-                    child.widget().deleteLater()
-        else:
-            layout = QVBoxLayout(self.graph_container)
-            layout.setContentsMargins(0, 0, 0, 0)
-
-        # Create a widget for the plot
-        plot_widget = QWidget()
-        layout.addWidget(plot_widget)
-
-        # Create the FinPlot axis
-        self.ax = fplt.create_plot_widget(plot_widget, rows=1)
-
-        # Plot data based on current type
-        if self.current_type == "line":
-            self.plot_line_data()
-            self.toggle_button.setText("Switch to Candlestick")
-        else:
-            self.plot_candlestick_data()
-            self.toggle_button.setText("Switch to Line")
-
-        # Add legend
-        fplt.add_legend(f"{self.ticker}", self.ax)
-
-        # Use autoviewrestore for auto-ranging
-        fplt.autoviewrestore()
-
-    def plot_line_data(self):
-        """Plot line graph data."""
-        # Clear any existing plots
-        self.ax.reset()
-
-        # 1. Plot Daily Data (Base Layer)
-        if self.daily_data is not None and not self.daily_data.empty:
-            fplt.plot(self.daily_data['Close'],
-                      ax=self.ax,
-                      legend='Daily Close',
-                      width=2,
-                      color='#3498db')
-
-        # 2. Plot Hourly Data (Overlay)
-        if self.hourly_data is not None and not self.hourly_data.empty:
-            fplt.plot(self.hourly_data['Close'],
-                      ax=self.ax,
-                      legend='Hourly Close',
-                      width=1,
-                      color='#2ecc71')
-
-    def plot_candlestick_data(self):
-        """Plot candlestick graph data."""
-        # Clear any existing plots
-        self.ax.reset()
-
-        # 1. Plot Daily Candles
-        if self.daily_data is not None and not self.daily_data.empty:
-            # Make sure we have all required columns
-            required_cols = ['Open', 'Close', 'High', 'Low']
-            if all(col in self.daily_data.columns for col in required_cols):
-                fplt.candlestick_ochl(self.daily_data[['Open', 'Close', 'High', 'Low']],
-                                      ax=self.ax,
-                                      legend='Daily')
-
-        # 2. Plot Hourly Candles (Overlay)
-        if self.hourly_data is not None and not self.hourly_data.empty:
-            required_cols = ['Open', 'Close', 'High', 'Low']
-            if all(col in self.hourly_data.columns for col in required_cols):
-                fplt.candlestick_ochl(self.hourly_data[['Open', 'Close', 'High', 'Low']],
-                                      ax=self.ax,
-                                      legend='Hourly')
-
-    def toggle_graph(self):
-        """Toggle between line and candlestick graphs."""
-        self.current_type = "candlestick" if self.current_type == "line" else "line"
-
-        # Recreate the plot with new type
-        if self.ax:
-            if self.current_type == "line":
-                self.plot_line_data()
-                self.toggle_button.setText("Switch to Candlestick")
+            if timeframe == "daily":
+                data = yf.download(self.ticker, start="1900-01-01", end=datetime.today().date(), progress=False, auto_adjust=True)
             else:
-                self.plot_candlestick_data()
-                self.toggle_button.setText("Switch to Line")
+                data = yf.download(self.ticker, period="max", interval="1h", progress=False, auto_adjust=True,)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            return None
 
-            # Update the display
-            fplt.refresh()
+        if data.empty:
+            print(f"EMPTY: {self.ticker}:{timeframe}")
+            return None
+
+        if not os.path.exists("stock_data_cache"):
+            os.makedirs("stock_data_cache")
+
+        data.columns = data.columns.get_level_values(0)
+        data.index.name = "Date"
+        data.reset_index().to_csv(cache_file, index=False)
+
+        return data
+
+class GraphManager():
+    def __init__(self, title="Stock Graph", stock_datas: [StockData] = []):
+        self.title = title
+        self.stock_datas = stock_datas
+
+        self.ax = fplt.create_plot(title)
+        self.font = QtGui.QFont()
+        self.font.setPixelSize(14)
+
+        self.ax.hideAxis('right')
+        self.ax.showAxis('left')
+        self.ax.getAxis('left').setLabel('Price', color='blue', units='USD')
+        self.ax.getAxis('bottom').setLabel('Date', color='blue')
+
+        self.ax.showGrid(x=True, y=True, alpha=0.1)
+
+    def add_stock_data(self, stock_data: StockData):
+        self.stock_datas.append(stock_data)
+
+    def add_line(self, stock: StockData, colour="skyblue", width=2, legend=None):
+        if legend is None: legend = f"{stock.ticker} Close"
+
+        close = stock.daily_data[["Close"]].rename(columns={"Close": "close"})
+        fplt.plot(close, ax=self.ax, color=colour, width=width, legend=legend)
+
+    def add_candlestick(self, stock: StockData):
+        ohlc = stock.daily_data[["Open", "Close", "High", "Low"]]
+        candles = fplt.candlestick_ochl(ohlc, ax=self.ax)
+        candles.colors.update(dict(bull_body="#45fc03", bull_shadow="#45fc03", bear_body="#fc0303", bear_shadow="#fc0303",))
+
+    def show(self):
+        fplt.show()
 
 
-if __name__ == '__main__':
-    ticker = input('Enter ticker symbol: ')
-    graph_manager = GraphInstance(ticker)
-    graph_manager.create_gui()
+if __name__ == "__main__":
 
-    # Start the event loop
-    sys.exit(graph_manager.app.exec_())
+    aapl = StockData("AAPL")
+    msft = StockData("MSFT")
+
+    graph = GraphManager(title="Stock Graph", stock_datas=[aapl, msft])
+
+    graph.add_candlestick(aapl)
+    graph.add_candlestick(msft)
+
+    fplt.show()
+
+

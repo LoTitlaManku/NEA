@@ -8,7 +8,7 @@ import yfinance as yf
 import finplot as fplt
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QComboBox, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 
 def safe_delete(item):
@@ -18,7 +18,8 @@ def safe_delete(item):
         try: item.remove()
         except Exception:
             try: item.hide()
-            except Exception: pass
+            except Exception:
+                pass
 
 class StockPlotter(QMainWindow):
     def __init__(self):
@@ -87,7 +88,7 @@ class StockPlotter(QMainWindow):
         self.redraw_mode()
         self.restore_view()
 
-    def add_ticker(self):
+    def add_ticker(self):#, test_var = False):
         ticker = self.input.text().strip().upper()
         if not ticker:
             self.status.setText("Enter a ticker")
@@ -99,10 +100,19 @@ class StockPlotter(QMainWindow):
             self.status.setText(f"Cannot load more than 3 tickers.")
             return
 
+        # if not test_var:
+        #     self.add_ticker(True)
+        #     ticker = "NVDA"
+        # else:
+        #     ticker = "AAPL"
+
+
+
         self.status.setText(f"Adding {ticker}...")
         QApplication.processEvents()  # update UI
 
-        data = self._load_data(ticker)
+        data = self._load_data(ticker, "hourly")
+
         if data is None or data.empty:
             self.status.setText("No data or invalid ticker")
             return
@@ -192,20 +202,51 @@ class StockPlotter(QMainWindow):
         self.status.setText(f"Removing {ticker}...")
         QApplication.processEvents()
 
-        info = self.loaded[ticker]
-        for point in info.get("line", []):
-            safe_delete(point)
-        for candle in info.get("candle", []):
-            safe_delete(candle)
-
         del self.loaded[ticker]
+        self.ticker_list_widget.removeItem(self.ticker_list_widget.findText(ticker))
+        self.recreate_graph()
+        self.status.setText(f"Removed: {ticker}")
 
-        ticker_item = self.ticker_list_widget.findText(ticker)
-        if ticker_item >= 0: self.ticker_list_widget.removeItem(ticker_item)
+    def recreate_graph(self):
+        layout = self.centralWidget().layout()
+
+        try:
+            layout.removeWidget(self.ax.vb.win)
+            self.ax.vb.win.setParent(None)
+            del self.ax
+        except Exception:
+            pass
+
+        self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
+        layout.addWidget(self.ax.vb.win)
+
+        for ticker, info in self.loaded.items():
+            df = info['df']
+            colour_index = info['colour_index']
+            line_colour = self.line_colours[colour_index]
+            candle_colour = self.candle_colours[colour_index]
+
+            line_plot = fplt.plot(df["Close"], ax=self.ax, color=line_colour, width=2, legend=None)
+            candle_items = fplt.candlestick_ochl(df[["Open", "Close", "High", "Low"]], ax=self.ax, candle_width=0.6)
+            candle_items.colors.update({
+                'bull_body': candle_colour['bull'],
+                'bull_shadow': candle_colour['bull'],
+                'bear_body': candle_colour['bear'],
+                'bear_shadow': candle_colour['bear']
+            })
+
+            info['line'] = [line_plot] if not isinstance(line_plot, list) else line_plot
+            info['candle'] = [candle_items] if not isinstance(candle_items, list) else candle_items
+
+            if self.selected_type == "line":
+                for candle in info['candle']:
+                    candle.hide()
+            else:
+                for lp in info['line']:
+                    lp.hide()
 
         self.update_stock_key_labels()
         fplt.refresh()
-        self.status.setText(f"Removed: {ticker}")
 
     def redraw_mode(self):
         for ticker, info in self.loaded.items():
@@ -258,13 +299,11 @@ class StockPlotter(QMainWindow):
                 parts.append(f"""<span style="display:inline-block; padding:2px 6px; background:{line_colour}; color:#fff; border-radius:3px; margin-right:6px;">{ticker}</span>""")
             elif self.selected_type == "candle":
                 candle_colour = self.candle_colours[info.get("colour_index")]
-                print(candle_colour, candle_colour["bull"])
-                # parts.append(
-                # f"""<span style="display: inline-block; padding:2px 6px; background:linear-gradient(to right, {candle_colour['bull']} 50%, {candle_colour['bear']} 50%); color:#fff; border-radius:3px; margin-right:6px;">{ticker}</span>
-                # """)
-                parts.append(f"""<span style="display:inline-block; padding:2px 6px; color:#000; border-radius:3px; margin-right:6px;">{ticker}</span>""")
-                parts.append(f"""<span style="display:inline-block; padding:2px 6px; background:{candle_colour['bull']}; color:{candle_colour['bull']}; border-radius:3px; margin-right:6px;">---</span>""")
-                parts.append(f"""<span style="display:inline-block; padding:2px 6px; background:{candle_colour['bear']}; color:{candle_colour['bear']}; border-radius:3px; margin-right:6px;">---</span>""")
+                parts.append(f"""
+                <span style="display:inline-block; padding:2px 6px; color:#fff; border-radius:3px; margin-right:6px;">{ticker}</span>
+                <span style="display:inline-block; padding:2px 6px; background:{candle_colour['bull']}; color:{candle_colour['bull']}; border-radius:3px; margin-right:6px;">---</span>
+                <span style="display:inline-block; padding:2px 6px; background:{candle_colour['bear']}; color:{candle_colour['bear']}; border-radius:3px; margin-right:6px;">---</span>
+                """)
 
         key_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"
         self.stock_key_label.setText(key_html)

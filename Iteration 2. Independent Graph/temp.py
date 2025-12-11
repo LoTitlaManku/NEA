@@ -110,6 +110,8 @@ class StockPlotter(QMainWindow):
         colour_index = next((i for i, colour in enumerate(self.line_colours) if i not in {info['colour_index'] for info in self.loaded.values()}), None)
         line_colour = self.line_colours[colour_index]
         candle_color = self.candle_colours[colour_index]
+        fplt.candle_bear_color = None
+        fplt.candle_bull_color = None
 
         line_plot = fplt.plot(data["Close"], ax=self.ax, color=line_colour, width=2, legend=None)
         candle_items = fplt.candlestick_ochl(data[["Open", "Close", "High", "Low"]], ax=self.ax,
@@ -251,8 +253,19 @@ class StockPlotter(QMainWindow):
 
         parts = []
         for ticker, info in self.loaded.items():
-            colour = self.line_colours[info.get("colour_index")]
-            parts.append(f'<span style="display:inline-block;padding:2px 6px;background:{colour};color:#fff;border-radius:3px;margin-right:6px;">{ticker}</span>')
+            if self.selected_type == "line":
+                line_colour = self.line_colours[info.get("colour_index")]
+                parts.append(f"""<span style="display:inline-block; padding:2px 6px; background:{line_colour}; color:#fff; border-radius:3px; margin-right:6px;">{ticker}</span>""")
+            elif self.selected_type == "candle":
+                candle_colour = self.candle_colours[info.get("colour_index")]
+                print(candle_colour, candle_colour["bull"])
+                # parts.append(
+                # f"""<span style="display: inline-block; padding:2px 6px; background:linear-gradient(to right, {candle_colour['bull']} 50%, {candle_colour['bear']} 50%); color:#fff; border-radius:3px; margin-right:6px;">{ticker}</span>
+                # """)
+                parts.append(f"""<span style="display:inline-block; padding:2px 6px; color:#000; border-radius:3px; margin-right:6px;">{ticker}</span>""")
+                parts.append(f"""<span style="display:inline-block; padding:2px 6px; background:{candle_colour['bull']}; color:{candle_colour['bull']}; border-radius:3px; margin-right:6px;">---</span>""")
+                parts.append(f"""<span style="display:inline-block; padding:2px 6px; background:{candle_colour['bear']}; color:{candle_colour['bear']}; border-radius:3px; margin-right:6px;">---</span>""")
+
         key_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"
         self.stock_key_label.setText(key_html)
 

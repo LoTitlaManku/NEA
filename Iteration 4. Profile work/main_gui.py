@@ -1,9 +1,10 @@
 
 import sys
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath, QMouseEvent
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy,
-                             QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider, QMessageBox)
+                             QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider, QMessageBox, QInputDialog)
+from profile import DataManager, Profile
 
 
 class MainWindow(QMainWindow):

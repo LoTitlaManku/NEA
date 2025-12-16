@@ -15,8 +15,12 @@ class Profile:
         self.__data.update(new_data)
         self.__manager.save_profile_data(self.__username, self.__key, self.__data)
 
-    def get_data(self):
+    def get_data(self) -> dict:
         return {key: value for key,value in self.__data.items() if key != "password"}
+
+    def get_username(self) -> str:
+        return self.__username
+
 
 class DataManager:
     def __init__(self):

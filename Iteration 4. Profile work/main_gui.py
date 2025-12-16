@@ -5,7 +5,15 @@ from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath, QMous
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy,
                              QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider, QMessageBox, QInputDialog)
 from profile import DataManager, Profile
+from profile_gui import ProfileWindow
 
+
+class ClickableLabel(QLabel):
+    clicked = pyqtSignal()
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -13,8 +21,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Stock Prediction App")
         self.setGeometry(100, 100, 1500, 900)
+        self.setStyleSheet("QWidget {background-color: white; color: black;}")
         self.btns = {"left_btns": [], "top_btns": [], "prediction_type_btns": [], "time_period_btns": [], "confirmation_btns": []}
         self.colours = {"Default": "#e3e3e3", "Hover": "#adadad", "Clicked": "#858585"}
+
+        # Initialize the profile logic
+        self.data_manager = DataManager()
+        self.logged_in = False
+        self.current_profile: Profile | None = None
+        self.status_label = QLabel("Not logged in")
 
         # Set up the main layout with left, center, and right frames
         central = QWidget(); self.setCentralWidget(central)
@@ -77,27 +92,16 @@ class MainWindow(QMainWindow):
         # Initialize the right sidebar with profile, prediction settings, and results
         right_frame = QFrame(); right_layout = QVBoxLayout(right_frame)
 
-
-
-
-
-
-
-        # Define profile frame
+        ## Define profile frame with circle widget and label
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
         profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Create profile widget with circular pixmap
-        circle_label = QLabel()
-        circle_label.setPixmap(self.circle_bitmap(QPixmap("img_src/person_icon.jpg"), 120))
-        circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.circle_label = ClickableLabel()
+        pixmap = QPixmap("img_src/person_icon.jpg")
+        self.circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); self.circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        profile_frame_layout.addWidget(circle_label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-
-
-
-
+        self.circle_label.clicked.connect(self.profile_click)
+        profile_frame_layout.addWidget(self.circle_label, alignment=Qt.AlignmentFlag.AlignCenter); profile_frame_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
 
         ## Define prediction settings frame (pd_set = prediction_settings) and widgets within
@@ -169,6 +173,49 @@ class MainWindow(QMainWindow):
             self.show_graph_save_popup(btn)
         elif btn.name == "confirm_pd_btn":
             self.start_prediction_simulation()
+
+    def profile_click(self):
+        if self.logged_in:
+            self.hide()
+            self.profile_window = ProfileWindow(self, self.current_profile)
+            self.profile_window.exec()
+        else:
+            self.login_window()
+
+    def login_window(self):
+        username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
+        if not ok or not username: return
+
+        password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:", QLineEdit.EchoMode.Password)
+        if not ok: return
+
+        result = self.data_manager.get_profile(username, password)
+        if isinstance(result, Profile):
+            self.logged_in = True; self.current_profile = result
+
+            self.status_label.setText(f"Status: Logged In as {username}")
+            self.circle_label.setStyleSheet("border: 4px solid green; border-radius: 60px;") # temp
+            QMessageBox.information(self, "Success", f"Welcome, {username}!")
+
+        elif result == "Non-existent profile":
+            reply = QMessageBox.question(self, "Profile Not Found", "Profile does not exist. Would you like to create a new one?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+            if reply == QMessageBox.StandardButton.Yes:
+                creation_response = self.data_manager.create_profile(username, password)
+                if creation_response == "Profile created": QMessageBox.information(self, "Success", "New profile created! Please log in again.")
+                else: QMessageBox.critical(self, "Creation Error", creation_response)
+
+                self.status_label.setText("Status: New login created"); return
+
+            self.status_label.setText("Status: Login Failed.")
+
+        elif result == "Incorrect password":
+            self.status_label.setText("Status: Incorrect Password.")
+            QMessageBox.critical(self, "Login Failed", "Incorrect password.")
+
+        else:
+            # Catch all other DataManager string error results
+            QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
     def start_prediction_simulation(self) -> None:
         print("Prediction starting...") # DEBUG

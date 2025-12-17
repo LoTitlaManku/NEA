@@ -1,13 +1,17 @@
+
 import numpy as np
 import pandas as pd
 import yfinance as yf
 import talib
+
 from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 from lightgbm import LGBMClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
 import warnings
 import json
 import random
@@ -18,59 +22,31 @@ warnings.filterwarnings('ignore')
 TEST_SIZE = 0.2
 RANDOM_SEED = 42
 SHARPE_THRESHOLD = 0.50
-JSON_FILE_PATH = 'stock_tickers.json'
-
-# Global list to store final results for the summary table
 FINAL_REPORT_DATA = []
 
 
 # --- TICKER FUNCTION (Modified for better file error handling) ---
-def get_random_stock_tickers_from_json(file_path, num_tickers=10):
-    """
-    Reads a JSON file, extracts all unique stock tickers, and returns
-    a random sample for testing. Handles missing file gracefully.
-    """
-    print(f"Reading tickers from local JSON file: {file_path}")
-
-    FALLBACK_TICKERS = [
-        'ARCC', 'ITIC', 'VET', 'WGO', 'BIP', 'GCI', 'EPR', 'PKG', 'TSLA', 'AMD'  # Ensure enough working tickers
-    ]
+def get_tickers(num_tickers=10):
+    fallback_tickers = ['ARCC', 'ITIC', 'VET', 'WGO', 'BIP', 'GCI', 'EPR', 'PKG', 'TSLA', 'AMD']
 
     try:
-        with open(file_path, 'r') as f:
+        with open("all_tickers.json", 'r') as f:
             data = json.load(f)
+        all_tickers = data["cleaned_tickers"]
 
-        all_tickers = [item['ticker'] for item in data.values()]
-
-        # Filter (removes common warrants, funds, and ETFs)
-        valid_stocks = [
-            t for t in all_tickers
-            if 1 <= len(t) <= 5 and not any(char in t for char in 'WQRX')
-        ]
-        valid_stocks = list(set(valid_stocks))
-
-    except FileNotFoundError:
-        # **FIX for FileNotFoundError**
-        print(f"Error: JSON file '{file_path}' not found. Using hardcoded FALLBACK list.")
-        return random.sample(FALLBACK_TICKERS, num_tickers)
     except Exception as e:
         print(f"Error processing JSON file: {e}. Falling back to hardcoded list.")
-        return random.sample(FALLBACK_TICKERS, num_tickers)
+        return random.sample(fallback_tickers, num_tickers)
 
-    if len(valid_stocks) < num_tickers:
-        print(f"Warning: Only {len(valid_stocks)} valid stocks found. Returning all found tickers.")
-        random_tickers = valid_stocks
-    else:
-        random_tickers = random.sample(valid_stocks, num_tickers)
+    random_tickers = random.sample(all_tickers, num_tickers)
 
-    print(
-        f"Successfully compiled {len(valid_stocks)} unique stock tickers and selected {len(random_tickers)} random ones.")
+    print(f"Successfully compiled {len(all_tickers)} unique stock tickers and selected {len(random_tickers)} random ones.")
     return random_tickers
 
 
 # --- HELPER FUNCTIONS (Adjusted to return data instead of print) ---
 
-def calculate_technical_indicators(df):
+def calculate_technical_indicators(df, ticker):
     """Calculates a set of common technical indicators using TALIB."""
     # (function content is unchanged)
     df['return'] = df['Adj Close'].pct_change()
@@ -79,6 +55,11 @@ def calculate_technical_indicators(df):
         df[f'return_lag_{i}'] = df['return'].shift(i)
     df['RSI'] = talib.RSI(df['Adj Close'], timeperiod=14)
     macd, macdsignal, macdhist = talib.MACD(df['Adj Close'], fastperiod=12, slowperiod=26, signalperiod=9)
+
+
+    df['sentiment'] = get_sentiment_score(ticker)
+
+
     df['MACD'] = macd
     df['MACD_Hist'] = macdhist
     df['ADX'] = talib.ADX(df['High'], df['Low'], df['Close'], timeperiod=14)
@@ -120,7 +101,7 @@ def get_data(ticker):
             return None, None
 
     data = data[['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']].dropna()
-    data = calculate_technical_indicators(data)
+    data = calculate_technical_indicators(data, ticker)
 
     # Check if data remains after dropping NaNs (for small data sets/TA calculation)
     if len(data) < 200:  # Need enough data for 200-day MA and train/test split
@@ -166,30 +147,51 @@ def evaluate_performance(y_true, y_pred, y_returns):
     return accuracy, sharpe_ratio, actionable_sharpe, flip_required
 
 
+def get_sentiment_score(ticker):
+    analyzer = SentimentIntensityAnalyzer()
+    try:
+        stock = yf.Ticker(ticker)
+        news = stock.news
+        if not news: return 0.1 # Neutral-positive bias
+        scores = [analyzer.polarity_scores(n['title'])['compound'] for n in news[:8]]
+        return np.mean(scores)
+    except:
+        return 0.0
+
+
 # --- MODEL RUNNERS (Modified to return detailed results dictionary) ---
 
+
 def run_lightgbm_optimized(ticker, X_train, Y_class_train, X_test, Y_class_test, Y_return_test_array, X_cols):
-    """Trains LightGBM and returns results dictionary."""
     n_pos = Y_class_train.sum()
     n_neg = len(Y_class_train) - n_pos
     scale_pos_weight = n_neg / n_pos
 
-    param_grid = {
-        'n_estimators': [50, 100],
-        'learning_rate': [0.01, 0.05],
-        'num_leaves': [10, 31],
-        'scale_pos_weight': [scale_pos_weight]
-    }
+    lgbm = LGBMClassifier(
+        n_estimators=100,
+        learning_rate=0.05,
+        random_state=RANDOM_SEED,
+        scale_pos_weight=scale_pos_weight,
+        verbose=-1
+    )
 
-    lgbm = LGBMClassifier(random_state=RANDOM_SEED, n_jobs=-1, verbose=-1, metric='None')
+    # --- WALK-FORWARD VALIDATION CALL ---
+    # We use TimeSeriesSplit to simulate retraining the model 3 times
+    # on expanding windows of history before finally testing on the X_test set.
     tscv = TimeSeriesSplit(n_splits=3)
-    grid_search = GridSearchCV(estimator=lgbm, param_grid=param_grid, cv=tscv, scoring='accuracy', n_jobs=-1)
+    wf_scores = []
 
-    print(f"-> Starting LGBM GridSearchCV for {ticker}...")
-    grid_search.fit(X_train, Y_class_train)
+    print(f"-> Performing Walk-Forward Validation for {ticker}...")
+    for train_idx, val_idx in tscv.split(X_train):
+        X_wf_train, X_wf_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
+        y_wf_train, y_wf_val = Y_class_train.iloc[train_idx], Y_class_train.iloc[val_idx]
 
-    best_lgbm = grid_search.best_estimator_
-    lgbm_pred = best_lgbm.predict(X_test)
+        lgbm.fit(X_wf_train, y_wf_train)
+        wf_scores.append(lgbm.score(X_wf_val, y_wf_val))
+
+    # Final fit on the full training set to predict the unseen test data
+    lgbm.fit(X_train, Y_class_train)
+    lgbm_pred = lgbm.predict(X_test)
 
     accuracy, sharpe, actionable_sharpe, flip_required = evaluate_performance(
         Y_class_test, lgbm_pred, Y_return_test_array
@@ -198,6 +200,7 @@ def run_lightgbm_optimized(ticker, X_train, Y_class_train, X_test, Y_class_test,
     return {
         'model_name': 'LGBM',
         'accuracy': accuracy,
+        'wf_accuracy': np.mean(wf_scores),  # New metric for your report
         'sharpe': sharpe,
         'actionable_sharpe': actionable_sharpe,
         'flip_required': flip_required,
@@ -324,6 +327,22 @@ def final_strategy_selector(ticker, all_results, Y_class_test):
     FINAL_REPORT_DATA.append(final_entry)
 
 
+def walk_forward_train(model, X, y, n_splits=5):
+    """Implements Walk-Forward Validation (Expanding Window)."""
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    scores = []
+
+    for train_index, test_index in tscv.split(X):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+
+        model.fit(X_train, y_train)
+        preds = model.predict(X_test)
+        scores.append(accuracy_score(y_test, preds))
+
+    return np.mean(scores)
+
+
 # --- NEW FUNCTION: DISPLAY FINAL REPORT ---
 def display_final_report():
     """Prints the final summary of all strategies in a clean table format."""
@@ -363,14 +382,14 @@ def display_final_report():
 if __name__ == "__main__":
 
     # 1. Populate TICKER_LIST from the local JSON file
-    TICKER_LIST = get_random_stock_tickers_from_json(JSON_FILE_PATH, num_tickers=10)
+    tickers = get_tickers(num_tickers=10)
 
     print("\n--- NEW RANDOM TICKER LIST FOR POPULARITY BIAS TEST ---")
-    print(TICKER_LIST)
+    print(tickers)
     print("------------------------------------------------------")
 
     # 2. Start ML process with the new list
-    for ticker in TICKER_LIST:
+    for ticker in tickers:
 
         train_data, test_data = get_data(ticker)
 

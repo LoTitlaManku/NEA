@@ -1,0 +1,31 @@
+
+
+
+didnt add transaction fees to accountability as working with low amounts so fees dont apply (T212)
+
+Why LightGBM? Unlike standard linear models, LightGBM (a Gradient Boosting framework) handles non-linear relationships. In stocks, the relationship between RSI and price isn't a straight line. LightGBM builds "trees" that can capture complex patterns (e.g., "If RSI is > 70 AND Volume is increasing, then price might drop"). It's also much faster and more memory-efficient than other boosting algorithms.
+
+Why TimeSeriesSplit? Standard cross-validation (K-Fold) shuffles data randomly. In finance, this is "cheating" (Data Leakage) because you might accidentally train on tomorrow's prices to predict today's. TimeSeriesSplit ensures the training set always comes before the test set chronologically, mimicking how you would trade in real life.
+
+The "Contrarian" Justification: In ML, a model with 30% accuracy is just as valuable as one with 70%. It simply means the model has found a reliable pattern, but is interpreting the direction wrong. By "flipping" the prediction, you leverage that underlying statistical signal rather than throwing away a perfectly consistent (albeit inverted) model.
+
+
+
+
+
+
+1. Why are some Sharpe Ratios high and others low?In trading, the Sharpe ratio ($S$) is calculated as:$$S = \frac{R_p - R_f}{\sigma_p}$$Where $R_p$ is your strategy return, $R_f$ is the risk-free rate (assumed 0 here), and $\sigma_p$ is the volatility.High Sharpe (e.g., LNC-PD at 2.71): This stock likely has a very "clean" signal. The model found a pattern that was consistent and had low "noise" (low volatility). In your case, LNC-PD is a preferred stock—these often trade in very predictable, range-bound patterns compared to volatile tech stocks.Low Sharpe (e.g., CCEP at 0.63): This indicates "Noise." The market for this stock might be more Efficient, meaning any obvious patterns (like RSI or MACD) have already been traded away by high-frequency bots, leaving only random price movements for your model to guess.
+
+
+2. Why is the "Original Sharpe" so often negative?
+This is a brilliant observation for your NEA. If your Original Sharpe is negative, it means your model's "Buy" signals actually resulted in losses.
+
+The "Inversion" Phenomenon: Machine Learning models sometimes learn the inverse of the market. If a model is consistently wrong (e.g., 40% accuracy), it is actually a great model—it has found a reliable pattern, it just doesn't know the labels are swapped.
+
+Contrarian Flip: Because your code uses abs(sharpe_ratio) to find the "Actionable Sharpe," it identifies these consistently wrong models and says: "Hey, if this model is reliably losing money when it says 'Buy,' let's just Sell instead." This turns a negative-return strategy into a positive one.
+
+
+
+
+
+

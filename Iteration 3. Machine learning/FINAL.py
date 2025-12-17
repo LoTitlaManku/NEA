@@ -10,7 +10,7 @@ import random
 # data management imports
 import yfinance as yf
 import talib
-from datetime import timedelta
+from datetime import timedelta, datetime
 # machine learning models imports
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
@@ -305,7 +305,13 @@ class TrainingManager:
         winning_dict = max(results, key=lambda result: result['absolute_sharpe'])
 
         print(f"\nModel Performance for {ticker}:")
-        for r in results: print(f"  {r['model_type']:6} - Acc: {r['accuracy']:.1%} | WF Acc: {r['walk_forward_accuracy']:.1%} | Sharpe: {r['absolute_sharpe']:.2f}")
+        for r in results:
+            print(f"  {r['model_type']:6} - Acc: {r['accuracy']:.1%} | WF Acc: {r['walk_forward_accuracy']:.1%} | Sharpe: {r['absolute_sharpe']:.2f}")
+            # A model is 'Stable' if the test accuracy is close to the walk-forward accuracy
+            stability = abs(r['accuracy'] - r['walk_forward_accuracy'])
+            if stability > 0.15:
+                print(f"Warning: {r['model_type']} is unstable (Acc diff: {stability:.2f})")
+
         print(f"\nWINNER: {winning_dict['model_type']} (Sharpe: {winning_dict['absolute_sharpe']:.2f})")
 
         # Save winning model data
@@ -323,6 +329,38 @@ class TrainingManager:
         print("FINAL RESEARCH REPORT")
         print("=" * 90)
         print(pd.DataFrame(final_report).to_markdown())
+
+############################################################################
+
+def save_prediction(ticker, forecast_results):
+    file_path = os.path.join("saved_predictions", f"{ticker}.csv")
+
+# temp gemini
+def save_prediction_to_ledger(ticker, current_date, forecast_results):
+    ledger_file = "model_performance_ledger.csv"
+
+    new_entries = []
+    for days, data in forecast_results.items():
+        entry = {
+            'Ticker': ticker,
+            'Date_Predicted': current_date,
+            'Target_Date': data['target_date'],
+            'Horizon': f"{days}D",
+            'Predicted_Price': round(data['price'], 2),
+            'Actual_Price': np.nan,  # To be filled later
+            'Error_Pct': np.nan
+        }
+        new_entries.append(entry)
+
+    # Append to CSV (create if doesn't exist)
+    df_new = pd.DataFrame(new_entries)
+    if not os.path.exists(ledger_file):
+        df_new.to_csv(ledger_file, index=False)
+    else:
+        df_new.to_csv(ledger_file, mode='a', header=False, index=False)
+
+    print(f"✔️ Predictions logged to {ledger_file}")
+
 
 # Run prediction using models from storage
 def run_prediction(ticker: str, interval: str):
@@ -385,6 +423,26 @@ def run_prediction(ticker: str, interval: str):
         return path_series.reindex(df_extended.index[df_extended.index <= forecast_dates[-1]]).interpolate(method="linear")
 
     tline_mid, tline_up, tline_lo = create_forecast_path('price'), create_forecast_path('up'), create_forecast_path('lo')
+
+    # Console feedback
+    print(f"\n" + "-" * 30)
+    print(f"LIVE AI FORECAST FOR {ticker}")
+    print(f"-" * 30)
+
+    for days in sorted(horizons.keys()):
+        res = forecast_results[days]
+        direction = "UP ▲" if res['price'] > current_price else "DOWN ▼"
+        change_pct = ((res['price'] / current_price) - 1) * 100
+
+        directional_classifier = joblib.load(f"{model_path}/cls_{days}d.pkl")
+        prob = float(directional_classifier.predict_proba(latest_scaled_features)[0][1])
+
+        conf_val = prob if res['price'] > current_price else (1 - prob)
+        print(f"{horizons[days]} Horizon: {direction} to ${res['price']:.2f} ({change_pct:+.2f}%)")
+        print(f"    Confidence: {conf_val:.1%} | Range: [${res['lo']:.2f} - ${res['up']:.2f}]")
+
+    print("-" * 30 + "\n")
+
 
     # Finplot Rendering (temp until mixed with main gui)
     ax = fplt.create_plot(f"AI Forecast: {ticker}")

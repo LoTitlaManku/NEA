@@ -47,7 +47,7 @@ class DataManager:
         with open(filename, "wb") as f:
             f.write(encrypted_data)
 
-    def get_profile(self, username, password) -> Profile | str:
+    def get_profile(self, username: str, password: str) -> Profile | str:
 
         target_key = self.__keys.get(username) # key as string
         if target_key is None: return "Non-existent profile"
@@ -103,6 +103,7 @@ if __name__ in "__main__":
         print("Incorrect password")
     else:
         print(data.get_data())
+        print(data.get_username())
 
     manage.create_profile("username3", "password") # print( ... ) -> profile already exists
 

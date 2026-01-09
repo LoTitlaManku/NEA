@@ -28,7 +28,7 @@ class ProfileWindow(QDialog):
 
     def build_left_frame(self) -> QFrame:
         # Initialize the left frame with profile settings and preferences
-        left_frame = QFrame(); left_layout = QVBoxLayout(left_frame)
+        left_frame = QFrame(); left_layout = QVBoxLayout(left_frame); left_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         ## Define profile widget and name
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
@@ -40,9 +40,13 @@ class ProfileWindow(QDialog):
 
         profile_frame_layout.addWidget(circle_label, alignment=Qt.AlignmentFlag.AlignCenter); profile_frame_layout.addWidget(name_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        ## Define edit and preferences settings
+        ## Define profile and preferences settings
+        setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black"); setting_frame.setFixedHeight(200)
+        setting_layout = QVBoxLayout(setting_frame); setting_layout.setContentsMargins(0,0,0,0); setting_layout.setSpacing(10)
+
+        # Edit profile settings
         edit_frame = QFrame(); edit_frame.setStyleSheet("border: 1px solid black")
-        edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(3,3,3,3)
+        edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(0,0,0,0); edit_layout.setSpacing(0)
 
         change_profile_btn = self.make_indv_btn("change_profile_btn", "img_src/change_profile_icon.png")
         export_data_btn = self.make_indv_btn("export_data_btn", "img_src/export_data.png")
@@ -52,9 +56,8 @@ class ProfileWindow(QDialog):
         edit_layout.addWidget(change_profile_btn); edit_layout.addWidget(export_data_btn)
         edit_layout.addWidget(import_data_btn); edit_layout.addWidget(delete_profile_btn)
 
-        ## Define risk tolerance preference
         # Risk slider widget
-        risk_layout = QVBoxLayout(); risk_layout.setContentsMargins(0 ,0 ,0 ,0); risk_layout.setSpacing(0)
+        risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
 
         risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}"""); risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1); risk_slider.setSingleStep(1)
@@ -67,8 +70,10 @@ class ProfileWindow(QDialog):
 
         risk_layout.addWidget(risk_value_label); risk_layout.addWidget(risk_slider); risk_layout.addLayout(number_layout)
 
+        setting_layout.addWidget(edit_frame); setting_layout.addLayout(risk_layout)
+
         # Add profile settings and preferences to left frame
-        left_layout.addWidget(profile_frame); left_layout.addWidget(edit_frame); left_layout.addLayout(risk_layout)
+        left_layout.addWidget(profile_frame); left_layout.addWidget(setting_frame); left_layout.addStretch()
         return left_frame
 
     def build_right_frame(self) -> QFrame:

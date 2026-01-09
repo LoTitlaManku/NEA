@@ -1,0 +1,4 @@
+Ticker,Interval,Date_Predicted,Target_Date,Horizon,Predicted_Price,Direction,Confidence,Actual_Price,Is_Correct
+NVDA,1d,2026-01-09 00:00,2026-01-10 00:00,1d,185.77,UP ▲,98.6%,,
+NVDA,1d,2026-01-09 00:00,2026-01-16 00:00,5d,187.07,UP ▲,100.0%,,
+NVDA,1d,2026-01-09 00:00,2026-02-08 00:00,21d,194.64,UP ▲,100.0%,,

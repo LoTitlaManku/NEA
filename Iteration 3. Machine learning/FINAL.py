@@ -2,15 +2,15 @@
 # file imports
 import os
 import joblib
-import json
 # math/logic imports
 import numpy as np
 import pandas as pd
-import random
 # data management imports
 import yfinance as yf
 import talib
 from datetime import timedelta, datetime
+import threading
+import time
 # machine learning models imports
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
@@ -28,11 +28,6 @@ import warnings
 warnings.filterwarnings('ignore')
 
 ############################################################################
-
-def get_random_ticker():
-    # Gets a random existing ticker
-    with open("all_tickers.json") as f: data = json.load(f)
-    return random.choice(data["cleaned_tickers"])
 
 def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     # Try to see if there is a cache file with the data
@@ -83,10 +78,11 @@ class TrainingManager:
     def calculate_technical_indicators(self, df: pd.DataFrame, ticker: str):
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.droplevel(1)
 
-        # Horizon targets (1d, 5d, 21d)
+        # Horizon (h) targets for selected period (p)
+        p = "h" if "h" in interval else "d"
         for h in [1, 5, 21]:
-            df[f'target_cls_{h}d'] = (df['Close'].shift(-h) > df['Close']).astype(int)
-            df[f'target_reg_{h}d'] = df['Close'].shift(-h)
+            df[f'target_cls_{h}{p}'] = (df['Close'].shift(-h) > df['Close']).astype(int)
+            df[f'target_reg_{h}{p}'] = df['Close'].shift(-h)
 
         df['return'] = df['Close'].pct_change()
         for i in range(1, 4): df[f'return_lag_{i}'] = df['return'].shift(i)
@@ -223,7 +219,7 @@ class TrainingManager:
             'sharpe_ratio': sharpe, 'absolute_sharpe': abs_sharpe, 'logic_flipped': needs_flip,
             'raw_predictions': test_predictions, 'trained_model_object': model, 'feature_scaler': data_normalizer}
 
-    # Save models for all horizons (1d, 5d, 21d) with the best performing model type
+    # Save models for all horizons with the best performing model type
     def _save_winning_strategy_assets(self, ticker, interval, best_model_dict, features_data, targets_dataframe):
         # Create the folder for this specific stock's model data to save
         save_folder = os.path.join("saved_models", f"{ticker}_{interval}")
@@ -242,30 +238,31 @@ class TrainingManager:
             joblib.dump(standardizer, f"{save_folder}/scaler.pkl")
 
         # Save winning model for each horizon
-        for horizon_days in [1, 5, 21]:
+        period = "h" if "h" in interval else "d"
+        for horizon in [1, 5, 21]:
             # Load the scaler to ensure math consistency
             current_scaler = joblib.load(f"{save_folder}/scaler.pkl")
             scaled_features = current_scaler.transform(features_data)
 
-            # Classifier (use the same model type as the best 1d model)
+            # Classifier (use the same model type as the best ran model)
             if best_model_dict['model_type'] == 'LGBM':
-                # Note: LGBM can handle unscaled data, so we use original features_data
+                # Note: LGBM can handle unscaled data, so use original features_data
                 model = LGBMClassifier(n_estimators=100, random_state=self.seed, verbose=-1)
-                model.fit(features_data, targets_dataframe[f'target_cls_{horizon_days}d'])
+                model.fit(features_data, targets_dataframe[f'target_cls_{horizon}{period}'])
             elif best_model_dict['model_type'] == 'Lasso':
                 model = LogisticRegression(penalty='l1', solver='liblinear', class_weight='balanced')
-                model.fit(scaled_features, targets_dataframe[f'target_cls_{horizon_days}d'])
+                model.fit(scaled_features, targets_dataframe[f'target_cls_{horizon}{period}'])
             else:  # SVC
                 model = SVC(kernel='rbf', C=1.0, class_weight='balanced', probability=True)
-                model.fit(scaled_features, targets_dataframe[f'target_cls_{horizon_days}d'])
+                model.fit(scaled_features, targets_dataframe[f'target_cls_{horizon}{period}'])
 
             # Regresser (for price target - gives actual dollar price to plot on graph)
             price_guesser = LinearRegression()
-            price_guesser.fit(scaled_features, targets_dataframe[f'target_reg_{horizon_days}d'])
+            price_guesser.fit(scaled_features, targets_dataframe[f'target_reg_{horizon}{period}'])
 
             # Save directional model and price model
-            joblib.dump(model, f"{save_folder}/cls_{horizon_days}d.pkl")
-            joblib.dump(price_guesser, f"{save_folder}/reg_{horizon_days}d.pkl")
+            joblib.dump(model, f"{save_folder}/cls_{horizon}{period}.pkl")
+            joblib.dump(price_guesser, f"{save_folder}/reg_{horizon}{period}.pkl")
 
     # Run all helper functions and consolidate the best model
     def run_training_pipeline(self, ticker: str, interval: str):
@@ -276,6 +273,8 @@ class TrainingManager:
 
         # Load data and add indicators
         data = load_data(ticker, interval)
+        if data is None: print("No data"); return "No data"
+
         df = self.calculate_technical_indicators(data, ticker)
         if len(df) < 300: print(f"Insufficient data for {ticker} (need 300+, got {len(df)})"); return
 
@@ -289,8 +288,9 @@ class TrainingManager:
         train_columns = [c for c in df.columns if c not in drop_columns]
 
         # Create input features and answers
+        period = "h" if 'h' in interval else "d"
         features_train, features_test = train_data[train_columns], test_data[train_columns]
-        targets_train, targets_test = train_data['target_cls_1d'], test_data['target_cls_1d']
+        targets_train, targets_test = train_data[f'target_cls_1{period}'], test_data[f'target_cls_1{period}']
         actual_returns_test = test_data['return'].values
 
         print(f"Training set: {len(train_data)} samples | Test set: {len(test_data)} samples")
@@ -330,25 +330,29 @@ class TrainingManager:
         print("=" * 90)
         print(pd.DataFrame(final_report).to_markdown())
 
+        return "Success"
+
 ############################################################################
 
-def save_prediction(ticker, forecast_results):
-    file_path = os.path.join("saved_predictions", f"{ticker}.csv")
+def save_prediction(ticker: str, interval: str, current_date: datetime, forecast_results: dict):
+    save_folder = "saved_predictinos"
+    if not os.path.exists(save_folder): os.makedirs(save_folder)
 
-# temp gemini
-def save_prediction_to_ledger(ticker, current_date, forecast_results):
-    ledger_file = "model_performance_ledger.csv"
-
+    ledger_file = os.path.join(save_folder, f"{ticker}_ledger.csv")
     new_entries = []
-    for days, data in forecast_results.items():
+    period = "h" if 'h' in interval else "d"
+    for horizon, data in forecast_results.items():
         entry = {
             'Ticker': ticker,
-            'Date_Predicted': current_date,
-            'Target_Date': data['target_date'],
-            'Horizon': f"{days}D",
+            "Interval": interval,
+            'Date_Predicted': current_date.strftime("%Y-%m-%d %H:%M"),
+            'Target_Date': data['target_date'].strftime('%Y-%m-%d %H:%M'),
+            'Horizon': f"{horizon}{period}",
             'Predicted_Price': round(data['price'], 2),
+            'Direction': data['dir'],
+            'Confidence': f"{data['conf']:.1%}",
             'Actual_Price': np.nan,  # To be filled later
-            'Error_Pct': np.nan
+            'Is_Correct': np.nan
         }
         new_entries.append(entry)
 
@@ -359,13 +363,16 @@ def save_prediction_to_ledger(ticker, current_date, forecast_results):
     else:
         df_new.to_csv(ledger_file, mode='a', header=False, index=False)
 
-    print(f"✔️ Predictions logged to {ledger_file}")
-
+    print(f"✔️ Predictions for {ticker} logged to {ledger_file}")
 
 # Run prediction using models from storage
 def run_prediction(ticker: str, interval: str):
     manager = TrainingManager()
     model_path = os.path.join("saved_models", f"{ticker}_{interval}")
+
+    # Ensure data exists
+    df = load_data(ticker, interval)
+    if df is None: print("No data"); return
 
     if not os.path.exists(os.path.join(model_path, "features.pkl")):
         print(f"No trained models found for {ticker}. Training...")
@@ -374,7 +381,6 @@ def run_prediction(ticker: str, interval: str):
     # Load assets
     feature_normalizer = joblib.load(f"{model_path}/scaler.pkl")
     required_features = joblib.load(f"{model_path}/features.pkl")
-    df = load_data(ticker, interval)
     processed_df = manager.calculate_technical_indicators(df.copy(), ticker)
 
     # Isolate last row (today's data) and scale it
@@ -386,15 +392,27 @@ def run_prediction(ticker: str, interval: str):
     last_trade_date = df.index[-1]
     current_volatility_atr = float(processed_df['ATR'].iloc[-1])
 
-    forecast_results = {}
-    horizons = {1: '1D', 5: '1W', 21: '1M'}
-    offsets = {1: 1, 5: 7, 21: 30}
+    if "d" in interval:
+        horizons = {1: '1 Day', 5: '1 Week', 21: '1 Month'}
+        offsets = {1: 1, 5: 7, 21: 30}
+        delta_type = "days"
+        freq = "D"
+    elif "h" in interval:
+        horizons = {1: '1 Hour', 5: '5 Hours', 21: '21 Hours'}
+        offsets = {1: 1, 5: 5, 21: 21}
+        delta_type = "hours"
+        freq = "H"
 
-    # Calculate forecasts
-    for days in horizons.keys():
+    # Calculate and display forecasts
+    print(f"\n" + "=" * 40)
+    print(f"LIVE PREDICTION FOR {ticker} ({interval})")
+    print("=" * 40)
+    forecast_results = {}
+    period = "h" if "h" in interval else "d"
+    for time_key in horizons.keys():
         # Load the specific model for this timeframe
-        directional_classifier = joblib.load(f"{model_path}/cls_{days}d.pkl")
-        price_regressor = joblib.load(f"{model_path}/reg_{days}d.pkl")
+        directional_classifier = joblib.load(f"{model_path}/cls_{time_key}{period}.pkl")
+        price_regressor = joblib.load(f"{model_path}/reg_{time_key}{period}.pkl")
 
         # Get the "Confidence" and the "Price Target"
         up_probability = float(directional_classifier.predict_proba(latest_scaled_features)[0][1])
@@ -402,56 +420,53 @@ def run_prediction(ticker: str, interval: str):
 
         # Volatility calculation
         prediction_uncertainty = 1.0 - (2 * abs(up_probability - 0.5))
-        capped_width = min((current_volatility_atr * np.sqrt(days)) * (1.0 + prediction_uncertainty), current_price * 0.15)
-        forecast_results[days] = {
+        capped_width = min((current_volatility_atr * np.sqrt(time_key)) * (1.0 + prediction_uncertainty), current_price * 0.15)
+
+        # Direction and Confidence logic
+        direction = "UP ▲" if predicted_price > current_price else "DOWN ▼"
+        confidence = up_probability if predicted_price > current_price else (1 - up_probability)
+
+        # Time Offset Fix
+        t_date = last_trade_date + timedelta(**{delta_type: offsets[time_key]})
+
+        forecast_results[time_key] = {
             'price': predicted_price,
             'up': predicted_price + capped_width,
             'lo': predicted_price - capped_width,
-            'target_date': last_trade_date + timedelta(days=offsets[days])
+            'target_date': t_date,
+            'conf': confidence,
+            'dir': direction
         }
+        print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
+    print("=" * 40 + "\n")
 
     # Setup data to show "future" by 30 days
-    future_dates = pd.date_range(start=last_trade_date + timedelta(days=1), periods=30, freq="D")
+    future_dates = pd.date_range(start=last_trade_date + timedelta(**{delta_type: 1}), periods=30, freq=freq)
     df_extended = pd.concat([df, pd.DataFrame(np.nan, index=future_dates, columns=df.columns)])
     forecast_dates = [last_trade_date] + [forecast_results[d]['target_date'] for d in horizons.keys()]
 
     # Turn prediction dots into smooth line
     def create_forecast_path(key):
-        forecast_prices = [current_price] + [forecast_results[d][key] if key in forecast_results[d]
-                                              else forecast_results[d]['price'] for d in horizons.keys()]
+        forecast_prices = [current_price] + [forecast_results[d][key] for d in horizons.keys()]
         path_series = pd.Series(forecast_prices, index=forecast_dates)
-        return path_series.reindex(df_extended.index[df_extended.index <= forecast_dates[-1]]).interpolate(method="linear")
+        return path_series.reindex(df_extended.index).interpolate(method="linear").dropna()
 
     tline_mid, tline_up, tline_lo = create_forecast_path('price'), create_forecast_path('up'), create_forecast_path('lo')
 
-    # Console feedback
-    print(f"\n" + "-" * 30)
-    print(f"LIVE AI FORECAST FOR {ticker}")
-    print(f"-" * 30)
-
-    for days in sorted(horizons.keys()):
-        res = forecast_results[days]
-        direction = "UP ▲" if res['price'] > current_price else "DOWN ▼"
-        change_pct = ((res['price'] / current_price) - 1) * 100
-
-        directional_classifier = joblib.load(f"{model_path}/cls_{days}d.pkl")
-        prob = float(directional_classifier.predict_proba(latest_scaled_features)[0][1])
-
-        conf_val = prob if res['price'] > current_price else (1 - prob)
-        print(f"{horizons[days]} Horizon: {direction} to ${res['price']:.2f} ({change_pct:+.2f}%)")
-        print(f"    Confidence: {conf_val:.1%} | Range: [${res['lo']:.2f} - ${res['up']:.2f}]")
-
-    print("-" * 30 + "\n")
-
-
     # Finplot Rendering (temp until mixed with main gui)
-    ax = fplt.create_plot(f"AI Forecast: {ticker}")
+    ax = fplt.create_plot(f"AI Forecast: {ticker} ({interval})")
     fplt.candlestick_ochl(df_extended[['Open', 'Close', 'High', 'Low']], ax=ax)
 
     # Shading for uncertain areas
     def paint_uncertain_zone(start_date, end_date, colour):
-        upper_anchor, lower_anchor = fplt.plot(tline_up.loc[start_date:end_date], width=0), fplt.plot(tline_lo.loc[start_date:end_date], width=0)
-        fill_colour = QColor(colour); fill_colour.setAlphaF(0.2); fplt.fill_between(upper_anchor, lower_anchor, color=fill_colour)
+        # Slice and ensure not empty slice sent to finplot
+        s_up = tline_up.loc[start_date:end_date]
+        if len(s_up) > 1:
+            upper_anchor = fplt.plot(s_up, width=0)
+            lower_anchor = fplt.plot(tline_lo.loc[start_date:end_date], width=0)
+            fill_colour = QColor(colour)
+            fill_colour.setAlphaF(0.2)
+            fplt.fill_between(upper_anchor, lower_anchor, color=fill_colour)
 
     paint_uncertain_zone(last_trade_date, forecast_results[1]['target_date'], '#00ff88')
     paint_uncertain_zone(forecast_results[1]['target_date'], forecast_results[5]['target_date'], '#00ccff')
@@ -466,15 +481,14 @@ def run_prediction(ticker: str, interval: str):
         fplt.add_text((forecast_results[days]['target_date'], forecast_results[days]['price']),
                       f"{label}: ${forecast_results[days]['price']:.2f}", color='#ffffff')
 
+    save_prediction(ticker, interval, last_trade_date, forecast_results)
     fplt.show()
-
-
 
 # --- MAIN ENTRY POINT ---
 if __name__ == "__main__":
     while True:
-        ticker = input("Enter ticker symbol: ").strip().upper()
-        interval = input("Select interval (1d, 1h, 15m) [default: 1d]: ").strip().lower() or "1d"
+        while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
+        while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
 
         if input("Train new models? (y/n): ").strip().lower() == 'y':
             manager = TrainingManager()

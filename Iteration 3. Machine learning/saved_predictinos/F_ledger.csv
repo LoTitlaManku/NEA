@@ -1,0 +1,4 @@
+Ticker,Interval,Date_Predicted,Target_Date,Horizon,Predicted_Price,Direction,Confidence,Actual_Price,Is_Correct
+F,1d,2026-01-09 00:00,2026-01-10 00:00,1d,24.44,UP ▲,50.6%,,
+F,1d,2026-01-09 00:00,2026-01-16 00:00,5d,24.38,UP ▲,48.4%,,
+F,1d,2026-01-09 00:00,2026-02-08 00:00,21d,23.92,UP ▲,36.4%,,

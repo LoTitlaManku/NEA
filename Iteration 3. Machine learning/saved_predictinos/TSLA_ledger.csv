@@ -1,0 +1,4 @@
+Ticker,Interval,Date_Predicted,Target_Date,Horizon,Predicted_Price,Direction,Confidence,Actual_Price,Is_Correct
+TSLA,1h,2026-01-09 18:30,2026-01-09 19:30,1h,432.83,DOWN ▼,48.6%,,
+TSLA,1h,2026-01-09 18:30,2026-01-09 23:30,5h,431.93,DOWN ▼,57.0%,,
+TSLA,1h,2026-01-09 18:30,2026-01-10 15:30,21h,426.92,DOWN ▼,70.3%,,

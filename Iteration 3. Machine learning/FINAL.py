@@ -1,6 +1,7 @@
 
 # file imports
 import os
+import sys
 import joblib
 # math/logic imports
 import numpy as np
@@ -8,9 +9,7 @@ import pandas as pd
 # data management imports
 import yfinance as yf
 import talib
-from datetime import timedelta, datetime
-import threading
-import time
+from datetime import timedelta, datetime, timezone, time
 # machine learning models imports
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
@@ -21,6 +20,8 @@ from sklearn.metrics import accuracy_score
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 # misc imports
 import finplot as fplt
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor
 import warnings
 
@@ -57,6 +58,66 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     data.to_csv(cache_file, index=True)
 
     return data
+
+# To update data for downloaded stocks every hour
+class BackgroundUpdater:
+    def __init__(self):
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.data_updater)
+
+        # Run once on startup
+        self.data_updater()
+
+        # Calculate how long to wait till next update then run every 15 mins
+        now = datetime.now(timezone.utc)
+        minutes_to_wait = 15 - (now.minute % 15)
+        initial_delay_ms = (minutes_to_wait * 60 - now.second) * 1000
+
+        QTimer.singleShot(int(initial_delay_ms), self.update_loop)
+
+    def update_loop(self):
+        # Check if market is open
+        now_utc = datetime.now(timezone.utc)
+        if now_utc.weekday() >= 5 or not time(13, 30) <= now_utc.time() <= time(21, 30): return
+
+        # Run loop
+        self.data_updater()
+        self.timer.start(900000)
+
+    def data_updater(self):
+        if not os.path.exists("stock_data_cache"): return
+
+        # Loop through every file in the folder
+        for filename in os.listdir("stock_data_cache"):
+            # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
+            parts = filename.replace(".csv", "").split("_")
+            ticker, interval = parts[0], parts[1]
+
+            # Load existing cached stock data from file
+            cache_file = os.path.join("stock_data_cache", filename)
+            df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+            df.index.name = "Date"
+            df.index = pd.to_datetime(df.index).tz_localize(None)
+
+            # Find time period for which data needs to be downloaded
+            last_timestamp = df.index[-1]
+            time_diff = datetime.now() - last_timestamp
+
+            # Determine if update is needed
+            needs_update = (interval == "1h" and time_diff.total_seconds() >= 3600) or (interval == "1d" and time_diff.days >= 1)
+
+            if needs_update:
+                # Fetch from the last date + 1 minute to avoid duplicating the last bar
+                new_data = yf.download(ticker, start=(last_timestamp + timedelta(minutes=1)), interval=interval, progress=False, auto_adjust=False)
+                if not new_data.empty:
+                    # Flatten columns if Multiindex and strip timezones to avoid alignment errors
+                    if isinstance(new_data.columns, pd.MultiIndex): new_data.columns = new_data.columns.get_level_values(0)
+                    new_data.index = pd.to_datetime(new_data.index).tz_localize(None)
+
+                    # Append and save
+                    updated_df = pd.concat([df, new_data])
+                    updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
+                    updated_df.to_csv(cache_file)
 
 ############################################################################
 
@@ -334,6 +395,7 @@ class TrainingManager:
 
 ############################################################################
 
+# Save prediction made to check or reuse later
 def save_prediction(ticker: str, interval: str, current_date: datetime, forecast_results: dict):
     save_folder = "saved_predictinos"
     if not os.path.exists(save_folder): os.makedirs(save_folder)
@@ -484,8 +546,17 @@ def run_prediction(ticker: str, interval: str):
     save_prediction(ticker, interval, last_trade_date, forecast_results)
     fplt.show()
 
-# --- MAIN ENTRY POINT ---
+############################################################################
+
 if __name__ == "__main__":
+
+    # Temp app
+    qt_app = QApplication.instance()
+    if not qt_app:
+        qt_app = QApplication(sys.argv)
+
+    updater = BackgroundUpdater()
+
     while True:
         while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
         while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")

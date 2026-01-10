@@ -67,6 +67,7 @@ class BackgroundUpdater:
 
         # Run once on startup
         self.data_updater()
+        self.accuracy_check()
 
         # Calculate how long to wait till next update then run every 15 mins
         now = datetime.now(timezone.utc)
@@ -82,6 +83,7 @@ class BackgroundUpdater:
 
         # Run loop
         self.data_updater()
+        if now_utc.minute == 30: self.accuracy_check()
         self.timer.start(900000)
 
     def data_updater(self):
@@ -95,20 +97,21 @@ class BackgroundUpdater:
 
             # Load existing cached stock data from file
             cache_file = os.path.join("stock_data_cache", filename)
-            df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
-            df.index.name = "Date"
-            df.index = pd.to_datetime(df.index).tz_localize(None)
+            df = load_data(ticker, interval)
 
             # Find time period for which data needs to be downloaded
             last_timestamp = df.index[-1]
             time_diff = datetime.now() - last_timestamp
+            period =  str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
 
             # Determine if update is needed
-            needs_update = (interval == "1h" and time_diff.total_seconds() >= 3600) or (interval == "1d" and time_diff.days >= 1)
+            needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
+                            or (interval == "1d" and time_diff.days >= 1))
 
             if needs_update:
-                # Fetch from the last date + 1 minute to avoid duplicating the last bar
-                new_data = yf.download(ticker, start=(last_timestamp + timedelta(minutes=1)), interval=interval, progress=False, auto_adjust=False)
+                # Fetch for the period that has passed
+                # new_data = yf.download(ticker, start=(last_timestamp + timedelta(minutes=1)), interval=interval, progress=False, auto_adjust=False)
+                new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
                 if not new_data.empty:
                     # Flatten columns if Multiindex and strip timezones to avoid alignment errors
                     if isinstance(new_data.columns, pd.MultiIndex): new_data.columns = new_data.columns.get_level_values(0)
@@ -118,6 +121,49 @@ class BackgroundUpdater:
                     updated_df = pd.concat([df, new_data])
                     updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
                     updated_df.to_csv(cache_file)
+
+    def accuracy_check(self):
+        ledger_folder = "saved_predictions"
+        if not os.path.exists(ledger_folder): return
+
+        for filename in os.listdir(ledger_folder):
+            ticker = filename.split("_")[0]
+            self.validate_ledger(ticker, os.path.join(ledger_folder, filename))
+
+    def validate_ledger(self, ticker: str, ledger_path: str):
+        ledger = pd.read_csv(ledger_path)
+
+        NaNs = ledger['Actual_Price'].isna()
+        if not NaNs.any(): return
+
+        ledger['Target_Date'] = pd.to_datetime(ledger['Target_Date'])
+        df_h = load_data(ticker, "1h")
+        df_d = load_data(ticker, "1d")
+
+        updated = False
+        for idx, row in ledger[NaNs].iterrows():
+            target_date = row['Target_Date']
+            start_date = row['Date_Predicted']
+            df = df_h if row['Interval'] == "1h" else df_d
+
+            if target_date in df.index:
+                start_price = float(df.asof(start_date)['Close'])
+                actual_price = float(df.asof(target_date)['Close'])
+                pred_price = float(row['Predicted_Price'])
+                direction = row['Direction']
+
+                dir_correct = True if (("UP" in direction and actual_price > start_price)
+                                       or ("DOWN" in direction and actual_price < start_price)) else False
+
+                # Check Price Accuracy (within 2% margin)
+                price_accurate = abs(actual_price - pred_price) / actual_price <= 0.02
+
+                ledger.at[idx, 'Actual_Price'] = round(actual_price, 2)
+                ledger.at[idx, 'Is_Correct'] = (dir_correct and price_accurate)
+                updated = True
+
+        if updated:
+            ledger.to_csv(ledger_path, index=False)
 
 ############################################################################
 
@@ -608,11 +654,11 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
 if __name__ == "__main__":
 
     # Temp app
-    # qt_app = QApplication.instance()
-    # if not qt_app:
-    #     qt_app = QApplication(sys.argv)
-    #
-    # updater = BackgroundUpdater()
+    qt_app = QApplication.instance()
+    if not qt_app:
+        qt_app = QApplication(sys.argv)
+
+    updater = BackgroundUpdater()
 
     while True:
         while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass

@@ -407,13 +407,12 @@ def save_prediction(ticker: str, interval: str, current_date: datetime, forecast
     period = "h" if 'h' in interval else "d"
     for horizon, data in forecast_results.items():
         entry = {
+            'Ticker': ticker,
             "Interval": interval,
             'Date_Predicted': current_date.strftime("%Y-%m-%d %H:%M"),
             'Target_Date': data['target_date'].strftime('%Y-%m-%d %H:%M'),
             'Horizon': f"{horizon}{period}",
             'Predicted_Price': round(data['price'], 2),
-            'Predicted_max': round(data['up'], 2),
-            'Predicted_min': round(data['lo'], 2),
             'Direction': data['dir'],
             'Confidence': f"{data['conf']:.1%}",
             'Actual_Price': np.nan,  # To be filled later
@@ -430,32 +429,6 @@ def save_prediction(ticker: str, interval: str, current_date: datetime, forecast
 
     print(f"✔️ Predictions for {ticker} logged to {ledger_file}")
 
-# Load prediction made
-def load_prediction(ticker: str, interval: str, date: datetime):
-    ledger_file = os.path.join("saved_predictions", f"{ticker}_ledger.csv")
-    ledger = pd.read_csv(ledger_file)
-    date = date.strftime("%Y-%m-%d %H:%M")
-
-    # Filter for the specific data
-    match = ledger[(ledger['Interval'] == interval) & (ledger['Date_Predicted'] == date)]
-    match['Date_Predicted'] = pd.to_datetime(match['Date_Predicted'])
-
-    match_dicts = match.reset_index().to_dict(orient='records')
-
-    # Rebuild the forecast results dict
-    forecast_results = {}
-    for i, horizon in zip(range(0,3), [1,5,21]):
-        forecast_results[horizon] = {
-            'price': float(match_dicts[i]['Predicted_Price']),
-            'up': float(match_dicts[i]['Predicted_max']),
-            'lo': float(match_dicts[i]['Predicted_min']),
-            'target_date': pd.to_datetime(match_dicts[i]['Target_Date']),
-            'conf': float(match_dicts[i]['Confidence'].replace("%", "")) / 100.0,
-            'dir': match_dicts[i]['Direction'],
-        }
-    print(forecast_results)
-    return forecast_results
-
 # Checks if the prediction for that ticker and time has already been saved
 def prediction_saved(ticker: str, interval: str, date) -> bool:
     ledger_file = os.path.join("saved_predictions", f"{ticker}_ledger.csv")
@@ -466,32 +439,16 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
     ledger['Date_Predicted'] = pd.to_datetime(ledger['Date_Predicted'])
 
     # Check if any entry matches current ticker and last trade date
-    match = ledger[(ledger['Interval'] == interval) &
+    match = ledger[(ledger['Ticker'] == ticker) &
+                   (ledger['Interval'] == interval) &
                    (ledger['Date_Predicted'] == date)]
 
     return not match.empty
 
+# Run prediction using models from storage
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str):
-    df, processed_df, assets = prepare_prediction_data(ticker, interval)
-    if df is None: return
-
-    is_hour = "h" in interval
-    last_trade_date = df.index[-1]
-    tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
-                {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
-                "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
-                float(df['Close'].iloc[-1])    ) # horizons, offsets, delta_type, period, last_trade_date, current_price
-
-    if not prediction_saved(ticker, interval, last_trade_date):
-        forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
-        save_prediction(ticker, interval, last_trade_date, forecast_results)
-    else:
-        forecast_results = load_prediction(ticker, interval, last_trade_date)
-
-    render_graph(ticker, interval, df, forecast_results, tech_info)
-
-def prepare_prediction_data(ticker: str, interval: str):
+    manager = TrainingManager()
     model_path = os.path.join("saved_models", f"{ticker}_{interval}")
 
     # Ensure data exists
@@ -500,40 +457,48 @@ def prepare_prediction_data(ticker: str, interval: str):
 
     if not os.path.exists(os.path.join(model_path, "features.pkl")):
         print(f"No trained models found for {ticker}. Training...")
-        TrainingManager().run_training_pipeline(ticker, interval)
+        manager.run_training_pipeline(ticker, interval)
 
     # Load assets
-    scaler = joblib.load(f"{model_path}/scaler.pkl")
-    features = joblib.load(f"{model_path}/features.pkl")
-    processed_df = TrainingManager().calculate_technical_indicators(df.copy(), ticker)
-
-    return df, processed_df, (scaler, features, model_path)
-
-def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, assets: tuple, tech_info: tuple):
-    # Grab current baseline values
-    scaler, features, model_path = assets
-    horizons, offsets, delta_type, period, last_trade_date, current_price =  tech_info
+    feature_normalizer = joblib.load(f"{model_path}/scaler.pkl")
+    required_features = joblib.load(f"{model_path}/features.pkl")
+    processed_df = manager.calculate_technical_indicators(df.copy(), ticker)
 
     # Isolate last row (today's data) and scale it
-    scaled_row = scaler.transform(processed_df[features].iloc[-1:])
+    latest_row_features = processed_df[required_features].iloc[-1:]
+    latest_scaled_features = feature_normalizer.transform(latest_row_features)
 
+    # Grab current baseline values
+    current_price = float(df['Close'].iloc[-1])
+    last_trade_date = df.index[-1]
     current_volatility_atr = float(processed_df['ATR'].iloc[-1])
-    forecast_results = {}
 
-    # Set correct horizon and offsets for day/hour prediction
+    # Set correct horizon and offset for day/hour prediction
+    if "d" in interval:
+        horizons = {1: '1 Day', 5: '1 Week', 21: '1 Month'}
+        offsets = {1: 1, 5: 7, 21: 30}
+        delta_type = "days"
+        freq = "D"
+    elif "h" in interval:
+        horizons = {1: '1 Hour', 5: '5 Hours', 21: '21 Hours'}
+        offsets = {1: 1, 5: 5, 21: 21}
+        delta_type = "hours"
+        freq = "H"
 
     # Calculate and display forecasts
     print(f"\n" + "=" * 40)
     print(f"LIVE PREDICTION FOR {ticker} ({interval})")
     print("=" * 40)
+    forecast_results = {}
+    period = "h" if "h" in interval else "d"
     for time_key in horizons.keys():
         # Load the specific model for this timeframe
         directional_classifier = joblib.load(f"{model_path}/cls_{time_key}{period}.pkl")
         price_regressor = joblib.load(f"{model_path}/reg_{time_key}{period}.pkl")
 
         # Get the "Confidence" and the "Price Target"
-        up_probability = float(directional_classifier.predict_proba(scaled_row)[0][1])
-        predicted_price = float(price_regressor.predict(scaled_row)[0])
+        up_probability = float(directional_classifier.predict_proba(latest_scaled_features)[0][1])
+        predicted_price = float(price_regressor.predict(latest_scaled_features)[0])
 
         # Volatility calculation
         prediction_uncertainty = 1.0 - (2 * abs(up_probability - 0.5))
@@ -543,24 +508,22 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
         direction = "UP ▲" if predicted_price > current_price else "DOWN ▼"
         confidence = up_probability if predicted_price > current_price else (1 - up_probability)
 
+        # Time Offset Fix
+        t_date = last_trade_date + timedelta(**{delta_type: offsets[time_key]})
+
         forecast_results[time_key] = {
             'price': predicted_price,
             'up': predicted_price + capped_width,
             'lo': predicted_price - capped_width,
-            'target_date': last_trade_date + timedelta(**{delta_type: offsets[time_key]}), # Time Offset Fix
+            'target_date': t_date,
             'conf': confidence,
             'dir': direction
         }
         print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
     print("=" * 40 + "\n")
 
-    print(forecast_results)
-    return forecast_results
-
-def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results: dict, tech_info: tuple):
-    horizons, offsets, delta_type, period, last_trade_date, current_price = tech_info
     # Setup data to show "future" by 30 days
-    future_dates = pd.date_range(start=last_trade_date + timedelta(**{delta_type: 1}), periods=30, freq=period)
+    future_dates = pd.date_range(start=last_trade_date + timedelta(**{delta_type: 1}), periods=30, freq=freq)
     df_extended = pd.concat([df, pd.DataFrame(np.nan, index=future_dates, columns=df.columns)])
     forecast_dates = [last_trade_date] + [forecast_results[d]['target_date'] for d in horizons.keys()]
 
@@ -603,16 +566,18 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
     save_prediction(ticker, interval, last_trade_date, forecast_results)
     fplt.show()
 
+
+
 ############################################################################
 
 if __name__ == "__main__":
 
     # Temp app
-    # qt_app = QApplication.instance()
-    # if not qt_app:
-    #     qt_app = QApplication(sys.argv)
-    #
-    # updater = BackgroundUpdater()
+    qt_app = QApplication.instance()
+    if not qt_app:
+        qt_app = QApplication(sys.argv)
+
+    updater = BackgroundUpdater()
 
     while True:
         while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
@@ -622,7 +587,7 @@ if __name__ == "__main__":
             manager = TrainingManager()
             manager.run_training_pipeline(ticker, interval)
 
-        run_prediction_pipline(ticker, interval)
+        run_prediction(ticker, interval)
 
 
 

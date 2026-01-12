@@ -32,6 +32,7 @@ warnings.filterwarnings('ignore')
 
 def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     # Try to see if there is a cache file with the data
+    if not os.path.exists("stock_data_cache"): os.makedirs("stock_data_cache")
     cache_file = os.path.join("stock_data_cache", f"{ticker}_{interval}.csv")
     if os.path.exists(cache_file):
         print(f"[CACHE] loaded {ticker}:{interval}")
@@ -46,7 +47,6 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     except: return None
 
     if data.empty: return None
-
     # Flattens columns if MultiIndex
     if isinstance(data.columns, pd.MultiIndex): data.columns = data.columns.get_level_values(0)
 
@@ -54,9 +54,7 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     data.index = pd.to_datetime(data.index).tz_localize(None)
     data.index.name = "Date"
 
-    if not os.path.exists("stock_data_cache"): os.makedirs("stock_data_cache")
     data.to_csv(cache_file, index=True)
-
     return data
 
 # To update data for downloaded stocks every hour
@@ -110,7 +108,6 @@ class BackgroundUpdater:
 
             if needs_update:
                 # Fetch for the period that has passed
-                # new_data = yf.download(ticker, start=(last_timestamp + timedelta(minutes=1)), interval=interval, progress=False, auto_adjust=False)
                 new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
                 if not new_data.empty:
                     # Flatten columns if Multiindex and strip timezones to avoid alignment errors
@@ -122,15 +119,18 @@ class BackgroundUpdater:
                     updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
                     updated_df.to_csv(cache_file)
 
+    # Checks predictions for dates that have passed
     def accuracy_check(self):
         ledger_folder = "saved_predictions"
         if not os.path.exists(ledger_folder): return
 
+        # Iterate through every file and validate them
         for filename in os.listdir(ledger_folder):
             ticker = filename.split("_")[0]
             self.validate_ledger(ticker, os.path.join(ledger_folder, filename))
 
     def validate_ledger(self, ticker: str, ledger_path: str):
+        # Load ledger and find all entries that are unvalidated
         ledger = pd.read_csv(ledger_path)
 
         NaNs = ledger['Actual_Price'].isna()
@@ -140,30 +140,31 @@ class BackgroundUpdater:
         df_h = load_data(ticker, "1h")
         df_d = load_data(ticker, "1d")
 
+        # Iterate through all rows and validate
         updated = False
         for idx, row in ledger[NaNs].iterrows():
             target_date = row['Target_Date']
             start_date = row['Date_Predicted']
             df = df_h if row['Interval'] == "1h" else df_d
 
+            # Check if predicted date has passed
             if target_date in df.index:
                 start_price = float(df.asof(start_date)['Close'])
                 actual_price = float(df.asof(target_date)['Close'])
                 pred_price = float(row['Predicted_Price'])
                 direction = row['Direction']
 
-                dir_correct = True if (("UP" in direction and actual_price > start_price)
+                # Check if the prediction is correct
+                direction_correct = True if (("UP" in direction and actual_price > start_price)
                                        or ("DOWN" in direction and actual_price < start_price)) else False
-
-                # Check Price Accuracy (within 2% margin)
                 price_accurate = abs(actual_price - pred_price) / actual_price <= 0.02
 
+                # Update validation fields in the records
                 ledger.at[idx, 'Actual_Price'] = round(actual_price, 2)
-                ledger.at[idx, 'Is_Correct'] = (dir_correct and price_accurate)
+                ledger.at[idx, 'Is_Correct'] = (direction_correct and price_accurate)
                 updated = True
 
-        if updated:
-            ledger.to_csv(ledger_path, index=False)
+        if updated: ledger.to_csv(ledger_path, index=False)
 
 ############################################################################
 

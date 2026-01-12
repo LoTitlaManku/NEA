@@ -1,0 +1,4 @@
+Interval,Date_Predicted,Target_Date,Horizon,Predicted_Price,Predicted_Max,Predicted_Min,Direction,Confidence,Actual_Price,Is_Correct
+1d,2026-01-12 00:00,2026-01-13 00:00,1d,18.36,20.08,16.65,UP ▲,51.0%,,
+1d,2026-01-12 00:00,2026-01-19 00:00,5d,18.4,20.46,16.34,UP ▲,48.6%,,
+1d,2026-01-12 00:00,2026-02-11 00:00,21d,18.78,20.84,16.72,UP ▲,54.7%,,

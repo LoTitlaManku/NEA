@@ -85,6 +85,7 @@ class BackgroundUpdater:
         if now_utc.minute == 30: self.accuracy_check()
         self.timer.start(900000)
 
+    # Update data for every saved stock
     def data_updater(self):
         if not os.path.exists("stock_data_cache"): return
 

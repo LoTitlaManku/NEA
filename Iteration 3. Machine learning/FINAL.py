@@ -178,10 +178,9 @@ class TrainingManager:
 
     # Get sentiment score from recent news
     def _get_sentiment_score(self, ticker: str):
-        analyzer = SentimentIntensityAnalyzer()
         try:
             stock = yf.Ticker(ticker); news = stock.news
-            return np.mean([analyzer.polarity_scores(n['title'])['compound'] for n in news[:8]])
+            return np.mean([SentimentIntensityAnalyzer().polarity_scores(n['title'])['compound'] for n in news[:8]])
         except: return 0.0
 
     # Calculate technical indicators

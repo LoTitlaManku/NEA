@@ -208,9 +208,7 @@ class TrainingManager:
         # Other indicators
         df['vol_ratio'] = df["return"].rolling(5).std() / df["return"].rolling(50).std()
         df['sentiment'] = self._get_sentiment_score(ticker)
-        df['hour'] = df.index.hour
-        df['day_of_week'] = df.index.dayofweek
-        df['month'] = df.index.month
+        df['hour'] = df.index.hour; df['day_of_week'] = df.index.dayofweek; df['month'] = df.index.month
 
         return df.dropna()
 

@@ -533,7 +533,7 @@ def run_prediction_pipline(ticker: str, interval: str):
         forecast_results = load_prediction(ticker, interval, last_trade_date)
 
     # Graph the prediction
-    # render_graph(ticker, interval, df, forecast_results, tech_info)
+    render_graph(ticker, interval, df, forecast_results, tech_info)
 
 # Adds in technical indicators, trains model if needed or loads it
 def prepare_prediction_data(ticker: str, interval: str):
@@ -655,21 +655,22 @@ if __name__ == "__main__":
     updater = BackgroundUpdater()
 
     # Run main logic
-    # while True:
-    #     while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
-    #     while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
+    while True:
+        while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
+        while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
+
+        run_prediction_pipline(ticker, interval)
+
+    # TESTING code (runs predictions on 500 random stocks)
+    # import json
+    # import random
+    # with open("all_tickers.json") as f:
+    #     tickers = json.load(f)["cleaned_tickers"]
     #
-    #     run_prediction_pipline(ticker, interval)
-
-    import json
-    import random
-    with open("all_tickers.json") as f:
-        tickers = json.load(f)["cleaned_tickers"]
-
-    for _ in range(500):
-        for interval in ["1d", "1h"]:
-            ticker = random.choice(tickers)
-
-            run_prediction_pipline(ticker, interval)
+    # for _ in range(500):
+    #     for interval in ["1d", "1h"]:
+    #         ticker = random.choice(tickers)
+    #
+    #         run_prediction_pipline(ticker, interval)
 
 

@@ -91,33 +91,35 @@ class BackgroundUpdater:
 
         # Loop through every file in the folder
         for filename in os.listdir("stock_data_cache"):
-            # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
-            parts = filename.replace(".csv", "").split("_")
-            ticker, interval = parts[0], parts[1]
+            try:
+                # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
+                parts = filename.replace(".csv", "").split("_")
+                ticker, interval = parts[0], parts[1]
 
-            # Load existing cached stock data from file
-            cache_file = os.path.join("stock_data_cache", filename)
-            df = load_data(ticker, interval)
+                # Load existing cached stock data from file
+                cache_file = os.path.join("stock_data_cache", filename)
+                df = load_data(ticker, interval)
 
-            # Find time period for which data needs to be downloaded
-            time_diff = datetime.now() - df.index[-1]
-            period =  str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
+                # Find time period for which data needs to be downloaded
+                time_diff = datetime.now() - df.index[-1]
+                period =  str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
 
-            needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
-                            or (interval == "1d" and time_diff.days >= 1))
+                needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
+                                or (interval == "1d" and time_diff.days >= 1))
 
-            if needs_update:
-                # Fetch for the period that has passed
-                new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
-                if not new_data.empty:
-                    # Flatten columns if Multiindex and strip timezones to avoid alignment errors
-                    if isinstance(new_data.columns, pd.MultiIndex): new_data.columns = new_data.columns.get_level_values(0)
-                    new_data.index = pd.to_datetime(new_data.index).tz_localize(None)
+                if needs_update:
+                    # Fetch for the period that has passed
+                    new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
+                    if not new_data.empty:
+                        # Flatten columns if Multiindex and strip timezones to avoid alignment errors
+                        if isinstance(new_data.columns, pd.MultiIndex): new_data.columns = new_data.columns.get_level_values(0)
+                        new_data.index = pd.to_datetime(new_data.index).tz_localize(None)
 
-                    # Append and save
-                    updated_df = pd.concat([df, new_data])
-                    updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
-                    updated_df.to_csv(cache_file)
+                        # Append and save
+                        updated_df = pd.concat([df, new_data])
+                        updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
+                        updated_df.to_csv(cache_file)
+            except Exception as e: print(f"Error - {type(e).__name__} {e}")
 
     # Checks predictions for dates that have passed
     def accuracy_check(self):
@@ -126,8 +128,10 @@ class BackgroundUpdater:
 
         # Iterate through every ledger and validate them
         for filename in os.listdir(ledger_folder):
-            ticker = filename.split("_")[0]
-            self.validate_ledger(ticker, os.path.join(ledger_folder, filename))
+            try:
+                ticker = filename.split("_")[0]
+                self.validate_ledger(ticker, os.path.join(ledger_folder, filename))
+            except Exception as e: print(f"Error - {type(e).__name__} {e}")
 
     # Validates all predictions in a given ledger
     def validate_ledger(self, ticker: str, ledger_path: str):
@@ -137,7 +141,7 @@ class BackgroundUpdater:
         if not NaNs.any(): return
 
         # Load existing hourly and daily data for the stock
-        ledger['Target_Date'] = pd.to_datetime(ledger['Target_Date'])
+        ledger['Target_Date'] = pd.to_datetime(ledger['Target_Date'], format='ISO8601')
         df_h = load_data(ticker, "1h")
         df_d = load_data(ticker, "1d")
 
@@ -163,6 +167,11 @@ class BackgroundUpdater:
                 # Update validation fields in the records
                 ledger.at[idx, 'Actual_Price'] = round(actual_price, 2)
                 ledger.at[idx, 'Is_Correct'] = (direction_correct and price_accurate)
+                updated = True
+
+            elif target_date.weekday() >= 5 or not time(13, 30) <= target_date.time() <= time(21, 30):
+                ledger.at[idx, "Actual_Price"] = "Invalid date"
+                ledger.at[idx, "Is_Correct"] = "Invalid date"
                 updated = True
 
         if updated: ledger.to_csv(ledger_path, index=False)
@@ -344,6 +353,10 @@ class TrainingManager:
             standardizer = StandardScaler().fit(features_data)
             joblib.dump(standardizer, f"{save_folder}/scaler.pkl")
 
+        # Save metadata that describes the model
+        json.dump({k: v for k,v in best_model_dict.items() if k not in ["raw_predictions", "trained_model_object", "feature_scaler"]}
+                  | {"training_data": datetime.now().strftime("%Y-%m-%d")}, open(f"{save_folder}/best_model_dict.json", "w"))
+
         # Save winning model for each horizon
         period = "h" if "h" in interval else "d"
         for horizon in [1, 5, 21]:
@@ -432,9 +445,9 @@ class TrainingManager:
             'Rule': "Flip" if winning_dict['logic_flipped'] else "Direct",
             'Test Acc': f"{winning_dict['accuracy']:.1%}"
         }]
-        print("\n" + "=" * 90)
+        print("\n" + "=" * 65)
         print("FINAL RESEARCH REPORT")
-        print("=" * 90)
+        print("=" * 65)
         print(pd.DataFrame(final_report).to_markdown())
 
         return True
@@ -481,7 +494,7 @@ def load_prediction(ticker: str, interval: str, date: datetime):
 
     # Filter for the specific data
     match = ledger[(ledger['Interval'] == interval) & (ledger['Date_Predicted'] == date)]
-    match['Date_Predicted'] = pd.to_datetime(match['Date_Predicted'])
+    match['Date_Predicted'] = pd.to_datetime(match['Date_Predicted'], format='ISO8601')
     match_dicts = match.reset_index().to_dict(orient='records')
 
     # Rebuild the forecast_results dict
@@ -491,7 +504,7 @@ def load_prediction(ticker: str, interval: str, date: datetime):
             'price': float(match_dicts[i]['Predicted_Price']),
             'up': float(match_dicts[i]['Predicted_Max']),
             'lo': float(match_dicts[i]['Predicted_Min']),
-            'target_date': pd.to_datetime(match_dicts[i]['Target_Date']),
+            'target_date': pd.to_datetime(match_dicts[i]['Target_Date'], format='ISO8601'),
             'conf': float(match_dicts[i]['Confidence'].replace("%", "")) / 100.0,
             'dir': match_dicts[i]['Direction'],
         }
@@ -503,7 +516,7 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
     if not os.path.exists(ledger_file): return False
 
     ledger = pd.read_csv(ledger_file)
-    ledger['Date_Predicted'] = pd.to_datetime(ledger['Date_Predicted'])
+    ledger['Date_Predicted'] = pd.to_datetime(ledger['Date_Predicted'], format='ISO8601')
 
     # Check if any entry matches current ticker and last trade date
     match = ledger[(ledger['Interval'] == interval) & (ledger['Date_Predicted'] == date)]
@@ -511,27 +524,29 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
 
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str):
-    # Add in technical indicators
-    df, processed_df, assets = prepare_prediction_data(ticker, interval)
-    if any(v is None for v in [df, processed_df, assets]): return
+    try:
+        # Add in technical indicators
+        df, processed_df, assets = prepare_prediction_data(ticker, interval)
+        if any(v is None for v in [df, processed_df, assets]): return
 
-    # Create a dict with basic information about the state of the prediction and stock
-    is_hour = "h" in interval
-    last_trade_date = df.index[-1]
-    tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
-                {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
-                "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
-                float(df['Close'].iloc[-1])    ) # horizons, offsets, delta_type, period, last_trade_date, current_price
+        # Create a dict with basic information about the state of the prediction and stock
+        is_hour = "h" in interval
+        last_trade_date = df.index[-1]
+        tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
+                    {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
+                    "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
+                    float(df['Close'].iloc[-1])    ) # horizons, offsets, delta_type, period, last_trade_date, current_price
 
-    # Load or create and save the prediction
-    if not prediction_saved(ticker, interval, last_trade_date):
-        forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
-        save_prediction(ticker, interval, last_trade_date, forecast_results)
-    else:
-        forecast_results = load_prediction(ticker, interval, last_trade_date)
+        # Load or create and save the prediction
+        if not prediction_saved(ticker, interval, last_trade_date):
+            forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
+            save_prediction(ticker, interval, last_trade_date, forecast_results)
+        else:
+            forecast_results = load_prediction(ticker, interval, last_trade_date)
 
-    # Graph the prediction
-    render_graph(ticker, interval, df, forecast_results, tech_info)
+        # Graph the prediction
+        # render_graph(ticker, interval, df, forecast_results, tech_info)
+    except Exception as e: print(f"Error - {type(e).__name__}: {e}")
 
 # Adds in technical indicators, trains model if needed or loads it
 def prepare_prediction_data(ticker: str, interval: str):
@@ -648,27 +663,29 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
 
 if __name__ == "__main__":
     # Temp app to run background updater (with main gui will be unneeded)
-    qt_app = QApplication.instance()
-    if not qt_app: qt_app = QApplication(sys.argv)
-    updater = BackgroundUpdater()
+    # qt_app = QApplication.instance()
+    # if not qt_app: qt_app = QApplication(sys.argv)
+    # updater = BackgroundUpdater()
 
     # Run main logic
-    while True:
-        while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
-        while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
-
-        run_prediction_pipline(ticker, interval)
+    # while True:
+    #     while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
+    #     while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
+    #
+    #     run_prediction_pipline(ticker, interval)
 
     # TESTING code (runs predictions on 500 random stocks)
-    # import json
-    # import random
-    # with open("all_tickers.json") as f:
-    #     tickers = json.load(f)["cleaned_tickers"]
-    #
-    # for _ in range(500):
-    #     for interval in ["1d", "1h"]:
-    #         ticker = random.choice(tickers)
-    #
-    #         run_prediction_pipline(ticker, interval)
+    import json
+    import random
+    with open("all_tickers.json") as f:
+        tickers = json.load(f)["cleaned_tickers"]
 
+    for n in range(500):
+        print(f"-   -   -   -   -   -   -   -   -   {n}   -   -   -   -   -   -   -   -   -")
+        ticker = random.choice(tickers)
+        for interval in ["1d", "1h"]:
+            run_prediction_pipline(ticker, interval)
+
+
+    print(datetime.now())
 

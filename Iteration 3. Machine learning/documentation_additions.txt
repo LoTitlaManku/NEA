@@ -30,3 +30,6 @@ Contrarian Flip: Because your code uses abs(sharpe_ratio) to find the "Actionabl
 
 removed 15min from prediction cause too hard.
 also doesnt take into account overnight or weekend for hourly cause cant be asked.
+
+
+about 7 seconds for one prediction on average.

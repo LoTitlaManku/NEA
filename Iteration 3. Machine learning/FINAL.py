@@ -1,12 +1,15 @@
 
 # file imports
 import os
+import shutil
+import json
 import sys
 import joblib
 import warnings
 # math/logic imports
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 # data management imports
 import yfinance as yf
 import talib
@@ -35,14 +38,14 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     if not os.path.exists("stock_data_cache"): os.makedirs("stock_data_cache")
     cache_file = os.path.join("stock_data_cache", f"{ticker}_{interval}.csv")
     if os.path.exists(cache_file):
-        print(f"[CACHE] loaded {ticker}:{interval}")
+        # print(f"[CACHE] loaded {ticker}:{interval}")
         df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
         df.index.name = "Date"
         df.index = pd.to_datetime(df.index).tz_localize(None)
         return df
 
     # Downloads the appropriate data from yahoo finance
-    print(f"Downloading {ticker} for {interval}")
+    # print(f"Downloading {ticker} for {interval}")
     try: data = yf.download(ticker, period="max", interval=interval, progress=False, auto_adjust=False)
     except: return None
 
@@ -86,11 +89,12 @@ class BackgroundUpdater:
         self.timer.start(900000)
 
     # Update data for every saved stock
-    def data_updater(self):
+    @staticmethod
+    def data_updater():
         if not os.path.exists("stock_data_cache"): return
 
         # Loop through every file in the folder
-        for filename in os.listdir("stock_data_cache"):
+        for filename in tqdm(os.listdir("stock_data_cache"), desc="Updating data", unit="file"):
             try:
                 # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
                 parts = filename.replace(".csv", "").split("_")
@@ -134,7 +138,8 @@ class BackgroundUpdater:
             except Exception as e: print(f"Error - {type(e).__name__} {e}")
 
     # Validates all predictions in a given ledger
-    def validate_ledger(self, ticker: str, ledger_path: str):
+    @staticmethod
+    def validate_ledger(ticker: str, ledger_path: str):
         # Load ledger and find all entries that are unvalidated
         ledger = pd.read_csv(ledger_path)
         NaNs = ledger['Actual_Price'].isna()
@@ -186,14 +191,15 @@ class TrainingManager:
         self.__test_size = 0.2 # How much of data used to test vs train
 
     # Get sentiment score from recent news
-    def _get_sentiment_score(self, ticker: str):
+    @staticmethod
+    def _get_sentiment_score(ticker: str):
         try:
             stock = yf.Ticker(ticker); news = stock.news
             return np.mean([SentimentIntensityAnalyzer().polarity_scores(n['title'])['compound'] for n in news[:8]])
         except: return 0.0
 
     # Calculate technical indicators
-    def calculate_technical_indicators(self, df: pd.DataFrame, ticker: str):
+    def calculate_technical_indicators(self, df: pd.DataFrame, ticker: str, interval: str) -> pd.DataFrame:
         if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.droplevel(1)
 
         # Horizon (h) targets for selected period (p)
@@ -222,7 +228,8 @@ class TrainingManager:
         return df.dropna()
 
     # Evaluate model performance with accuracy and sharpe ratio
-    def _evaluate_performance(self, actual_direction, predicted_direction, actual_returns):
+    @staticmethod
+    def _evaluate_performance(actual_direction, predicted_direction, actual_returns):
         # How often was the AI right about Up vs Down?
         hit_rate = accuracy_score(actual_direction, predicted_direction)
         # Following the AI, what would a daily wallet look like?
@@ -354,8 +361,11 @@ class TrainingManager:
             joblib.dump(standardizer, f"{save_folder}/scaler.pkl")
 
         # Save metadata that describes the model
-        json.dump({k: v for k,v in best_model_dict.items() if k not in ["raw_predictions", "trained_model_object", "feature_scaler"]}
-                  | {"training_data": datetime.now().strftime("%Y-%m-%d")}, open(f"{save_folder}/best_model_dict.json", "w"))
+        meta = ({k: v for k,v in best_model_dict.items() if k not in ["raw_predictions", "trained_model_object", "feature_scaler"]}
+                | {"training_data": datetime.now().strftime("%Y-%m-%d")})
+        # Convert numpy objects to standard python types due to json compatibility issues
+        for key,value in meta.items(): meta.update({key: value.item() if hasattr(value, 'item') else value})
+        with open(f'{save_folder}/metadata.json', 'w') as f: json.dump(meta, f)
 
         # Save winning model for each horizon
         period = "h" if "h" in interval else "d"
@@ -386,7 +396,9 @@ class TrainingManager:
 
     # Run all helper functions and consolidate the best model
     def run_training_pipeline(self, ticker: str, interval: str):
-        if os.path.exists(os.path.join("saved_models", f"{ticker}_{interval}")): print("Model already trained for this ticker."); return False
+        # Remove any corrupt model paths (i.e. not all necessary files exist validated before call)
+        model_path = os.path.join("saved_models", f"{ticker}_{interval}")
+        if os.path.exists(model_path): shutil.rmtree(model_path)
 
         # Train and build models for ticker
         print(f"\n{'=' * 20} Training {ticker} {'=' * 20}")
@@ -395,7 +407,7 @@ class TrainingManager:
         data = load_data(ticker, interval)
         if data is None: print("No data"); return False
 
-        df = self.calculate_technical_indicators(data, ticker)
+        df = self.calculate_technical_indicators(data, ticker, interval)
         if len(df) < 300: print(f"Insufficient data for {ticker} (need 300+, got {len(df)})"); return False
 
         # Partition data
@@ -472,6 +484,7 @@ def save_prediction(ticker: str, interval: str, current_date: datetime, forecast
             'Date_Predicted': current_date.strftime("%Y-%m-%d %H:%M"),
             'Target_Date': data['target_date'].strftime('%Y-%m-%d %H:%M'),
             'Horizon': f"{horizon}{period}",
+            "Current_Price": round(data['current_price'], 2),
             'Predicted_Price': round(data['price'], 2),
             'Predicted_Max': round(data['up'], 2),
             'Predicted_Min': round(data['lo'], 2),
@@ -501,6 +514,7 @@ def load_prediction(ticker: str, interval: str, date: datetime):
     forecast_results = {}
     for i, horizon in zip(range(0,3), [1,5,21]):
         forecast_results[horizon] = {
+            "current_price": float(match_dicts[i]['current_price']),
             'price': float(match_dicts[i]['Predicted_Price']),
             'up': float(match_dicts[i]['Predicted_Max']),
             'lo': float(match_dicts[i]['Predicted_Min']),
@@ -557,15 +571,18 @@ def prepare_prediction_data(ticker: str, interval: str):
     if df is None: print("No data"); return None, None, None
 
     # Trains a model if needed
-    if not os.path.exists(os.path.join(model_path, "features.pkl")):
-        print(f"No trained models found for {ticker}. Training...")
+    p = "h" if "h" in interval else "d"
+    if not all(os.path.exists(os.path.join(model_path, f)) for f in
+               [f"cls_1{p}.pkl", f"cls_5{p}.pkl", f"cls_21{p}.pkl", f"reg_1{p}.pkl", f"reg_5{p}.pkl", f"reg_21{p}.pkl", "features.pkl", "scaler.pkl"]):
+        #, "metadata.json"]):     add back in after batch testing
+        print(f"Empty or missing trained models found for {ticker}. Training...")
         success = TrainingManager().run_training_pipeline(ticker, interval)
         if not success: return None, None, None
 
     # Load assets
     scaler = joblib.load(f"{model_path}/scaler.pkl")
     features = joblib.load(f"{model_path}/features.pkl")
-    processed_df = TrainingManager().calculate_technical_indicators(df.copy(), ticker)
+    processed_df = TrainingManager().calculate_technical_indicators(df.copy(), ticker, interval)
 
     return df, processed_df, (scaler, features, model_path)
 
@@ -581,9 +598,9 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
     forecast_results = {}
 
     # Calculate and display forecasts
-    print(f"\n" + "=" * 40)
-    print(f"LIVE PREDICTION FOR {ticker} ({interval})")
-    print("=" * 40)
+    # print(f"\n" + "=" * 40)
+    # print(f"LIVE PREDICTION FOR {ticker} ({interval})")
+    # print("=" * 40)
     for time_key in horizons.keys():
         # Load the specific model for this timeframe
         directional_classifier = joblib.load(f"{model_path}/cls_{time_key}{period}.pkl")
@@ -602,6 +619,7 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
         confidence = up_probability if predicted_price > current_price else (1 - up_probability)
 
         forecast_results[time_key] = {
+            "current_price": current_price,
             'price': predicted_price,
             'up': predicted_price + capped_width,
             'lo': predicted_price - capped_width,
@@ -609,8 +627,8 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
             'conf': confidence,
             'dir': direction
         }
-        print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
-    print("=" * 40 + "\n")
+        # print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
+    # print("=" * 40 + "\n")
 
     return forecast_results
 
@@ -661,11 +679,11 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
 
 ############################################################################
 
-if __name__ == "__main__":
+def main():
     # Temp app to run background updater (with main gui will be unneeded)
-    # qt_app = QApplication.instance()
-    # if not qt_app: qt_app = QApplication(sys.argv)
-    # updater = BackgroundUpdater()
+    qt_app = QApplication.instance()
+    if not qt_app: qt_app = QApplication(sys.argv)
+    updater = BackgroundUpdater()
 
     # Run main logic
     # while True:
@@ -675,17 +693,48 @@ if __name__ == "__main__":
     #     run_prediction_pipline(ticker, interval)
 
     # TESTING code (runs predictions on 500 random stocks)
-    import json
-    import random
-    with open("all_tickers.json") as f:
-        tickers = json.load(f)["cleaned_tickers"]
+    # import random
+    # with open("all_tickers.json") as f:
+    #     tickers = json.load(f)["cleaned_tickers"]
+    # for n in range(500):
+    #     print(f"-   -   -   -   -   -   -   {n}   -   -   -   -   -   -   -")
+    #     ticker = random.choice(tickers)
+    #     for interval in ["1d", "1h"]:
+    #         run_prediction_pipline(ticker, interval)
+    # print(datetime.now())
 
-    for n in range(500):
-        print(f"-   -   -   -   -   -   -   -   -   {n}   -   -   -   -   -   -   -   -   -")
-        ticker = random.choice(tickers)
-        for interval in ["1d", "1h"]:
+    # TESTING code (runs predictions on all saved models)
+    import time
+    model_folders = os.listdir("saved_models")
+    start_time = time.time()
+    success_count, fail_count = 0, 0
+    for folder_name in tqdm(model_folders, desc="Predicting Stocks", unit="ticker"):
+        try:
+            parts = folder_name.split("_")
+            ticker, interval = parts[0], parts[1]
+
             run_prediction_pipline(ticker, interval)
+            success_count += 1
+
+        except Exception as e:
+            print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
+            fail_count += 1
+
+    print(f"Total Processed: {len(model_folders)}")
+    print(f"Successful:      {success_count}")
+    print(f"Failed:          {fail_count}")
+    print(f"Total Time:      {(time.time() - start_time) / 60:.2f} minutes")
 
 
-    print(datetime.now())
+    # run_prediction_pipline("AAPL", "1d")
 
+if __name__ == "__main__":
+    main()
+
+
+
+"""
+Line 573 remember to add "metadata.json" to file list 
+-> currently excluded as first few days of prediction dont contain this file
+
+"""

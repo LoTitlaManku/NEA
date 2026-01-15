@@ -1,9 +1,9 @@
 import sys
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter, QPixmap, QPainterPath
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath, QMouseEvent
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy,
-                             QWidget, QLabel, QFrame, QPushButton, QDialog, QSlider, QMessageBox, QInputDialog)
+                             QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider, QMessageBox, QInputDialog)
 
 from profile import Profile
 
@@ -34,11 +34,11 @@ class ProfileWindow(QDialog):
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
         profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        circle_label = QLabel(); pixmap = QPixmap("img_src/person_icon.jpg")
-        circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.circle_label = QLabel(); pixmap = QPixmap("img_src/person_icon.jpg")
+        self.circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); self.circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label = QLabel(self.profile.get_username())
 
-        profile_frame_layout.addWidget(circle_label, alignment=Qt.AlignmentFlag.AlignCenter); profile_frame_layout.addWidget(name_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        profile_frame_layout.addWidget(self.circle_label, alignment=Qt.AlignmentFlag.AlignCenter); profile_frame_layout.addWidget(name_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ## Define profile and preferences settings
         setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black"); setting_frame.setFixedHeight(200)
@@ -53,22 +53,27 @@ class ProfileWindow(QDialog):
         import_data_btn = self.make_indv_btn("import_data_btn", "img_src/import_data.png")
         delete_profile_btn = self.make_indv_btn("delete_profile_btn", "img_src/delete.png")
 
+        change_profile_btn.clicked.connect(self.change_profile)
+
         edit_layout.addWidget(change_profile_btn); edit_layout.addWidget(export_data_btn)
         edit_layout.addWidget(import_data_btn); edit_layout.addWidget(delete_profile_btn)
 
         # Risk slider widget
         risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
 
-        risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}"""); risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1); risk_slider.setSingleStep(1)
-        risk_slider.valueChanged.connect(lambda v: risk_value_label.setText(f"Risk tolerance: {v}{' (Recommended) 'if v == 5 else ''}"))
+        self.risk_slider = QSlider(Qt.Orientation.Horizontal); self.risk_slider.setStyleSheet("""QSlider {border: none}""")
+        self.risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow); self.risk_slider.setMinimum(1); self.risk_slider.setMaximum(10)
+        self.risk_slider.setTickInterval(1); self.risk_slider.setSingleStep(1); self.risk_slider.setValue(self.profile.get_data()["Risk tolerance"])
+        self.risk_slider.valueChanged.connect(lambda v:
+            risk_value_label.setText(f"Risk tolerance: {v}{' (Current)' if v == self.profile.get_data()['Risk tolerance'] else (' (Recommended)' if v == 5 else '')}"))
 
         # Risk slider labels
-        risk_value_label = QLabel("Risk tolerance: 1"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter); risk_value_label.setStyleSheet("border: none; font-size: 13px; font-family: Aller Display")
+        risk_value_label = QLabel(f"Risk tolerance: {self.profile.get_data()['Risk tolerance']}"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        risk_value_label.setStyleSheet("border: none; font-size: 13px; font-family: Aller Display")
         number_layout = QHBoxLayout()
         for i in range(1, 11): nlabel = QLabel(str(i)); nlabel.setAlignment(Qt.AlignmentFlag.AlignCenter); nlabel.setStyleSheet("border: none"); number_layout.addWidget(nlabel)
 
-        risk_layout.addWidget(risk_value_label); risk_layout.addWidget(risk_slider); risk_layout.addLayout(number_layout)
+        risk_layout.addWidget(risk_value_label); risk_layout.addWidget(self.risk_slider); risk_layout.addLayout(number_layout)
 
         setting_layout.addWidget(edit_frame); setting_layout.addLayout(risk_layout)
 
@@ -82,7 +87,6 @@ class ProfileWindow(QDialog):
         layout.addWidget(widget)
         return frame
 
-
     def testfunc(self, btn: QPushButton) -> None:
         # Temporary function to test button click activation
         print("testfunc", btn.name)
@@ -90,7 +94,28 @@ class ProfileWindow(QDialog):
             self.change_profile()
 
     def change_profile(self):
-        pass
+        username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
+        if not ok or not username: return
+
+        password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:", QLineEdit.EchoMode.Password)
+        if not ok: return
+
+        result = self.parent_window.data_manager.get_profile(username, password)
+        if isinstance(result, Profile):
+            self.parent_window.current_profile = result
+            self.parent_window.status_label.setText(f"Status: Logged In as {username}")
+            self.close()
+
+        elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist.")
+        elif result == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
+        else:
+            # Catch all other DataManager string error results
+            QMessageBox.critical(self, "Error", f"An error occurred: {result}")
+
+    def export_profile(self):
+        data = self.profile.get_data()
+
+        # ... gemini
 
     def make_indv_btn(self, name, img, width = None, height = None) -> QPushButton:
         # Creates an independent button calls a function every time it is clicked
@@ -124,55 +149,12 @@ class ProfileWindow(QDialog):
         painter.drawPixmap(0, 0, pixmap); painter.end()
         return mask
 
+    def save_data(self):
+        self.profile.update_data({"Risk tolerance": self.risk_slider.value()})
+
+    # Called when the window is closed
     def show_parent_on_close(self):
-        # Called when the window is closed
         self.parent_window.show()
-
-###########
-
-    def setup_ui(self):
-        layout = QVBoxLayout(self)
-
-        profile_data = self.profile.get_data()
-
-        # Display Username
-        username_label = QLabel(f"Welcome, {self.profile.get_username()}")
-        username_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(username_label)
-
-        # Display Saved Stocks
-        stocks_list = profile_data.get("Saved stocks", [])
-        stocks_label = QLabel(f"Saved Stocks ({len(stocks_list)}):\n" + "\n".join(stocks_list))
-        layout.addWidget(stocks_label)
-
-        # Example Update Button
-        update_btn = QPushButton("Add Mock Stock (TSLA)")
-        update_btn.clicked.connect(self.add_mock_stock)
-        layout.addWidget(update_btn)
-
-        # Close Button
-        close_btn = QPushButton("Close Profile Manager")
-        close_btn.clicked.connect(self.accept)  # Accept closes the dialog
-        layout.addWidget(close_btn)
-
-    def add_mock_stock(self):
-        """Example function to demonstrate data update and persistence."""
-
-        # 1. Get current data (includes password, but we only manipulate stocks)
-        current_data = self.profile.get_data()
-
-        new_stocks = current_data.get("Saved stocks", [])
-        if "TSLA" not in new_stocks:
-            new_stocks.append("TSLA")
-
-            # 2. Update the Profile object (which saves to the file)
-            self.profile.update_data({"Saved stocks": new_stocks})
-
-            # 3. Update the UI
-            self.setup_ui()  # Re-draws the UI with the new data
-            QMessageBox.information(self, "Success", "TSLA added and saved!")
-        else:
-            QMessageBox.warning(self, "Error", "TSLA already saved!")
 
 
 if __name__ == "__main__":

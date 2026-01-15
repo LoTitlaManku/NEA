@@ -1,5 +1,6 @@
 
 import json
+import os
 from cryptography.fernet import Fernet
 
 
@@ -13,13 +14,17 @@ class Profile:
     def update_data(self, new_data: dict):
         new_data = {key: value for key,value in new_data.items() if key != "password"}
         self.__data.update(new_data)
-        self.__manager.save_profile_data(self.__username, self.__key, self.__data)
+        self.__manager.save_profile_data(self, self.__data.get("password"), self.__key)
 
     def get_data(self) -> dict:
         return {key: value for key,value in self.__data.items() if key != "password"}
 
     def get_username(self) -> str:
         return self.__username
+
+    def validate_password(self, password):
+        if self.__data.get("password") == password: return True
+        else: return False
 
 
 class DataManager:
@@ -28,13 +33,15 @@ class DataManager:
         self.__key_file = "keys.dat"
         self.__data_file = "data.dat"
 
+        if not os.path.exists(self.__key_file): self.save_encrypt_file(self.__key_file, {}, self.__master_key)
+        if not os.path.exists(self.__data_file): json.dump({}, open(self.__data_file, "w"))
+
         self.__keys = self.load_decrypt_file(self.__key_file, self.__master_key)
         with open(self.__data_file, "r") as f: self.__profile_datas = json.load(f)
 
     def load_decrypt_file(self, filename: str, key: bytes) -> dict:
         fernet = Fernet(key)
-        with open(filename, "rb") as f:
-            encrypted_data = f.read()
+        with open(filename, "rb") as f: encrypted_data = f.read()
 
         decrypted_data = fernet.decrypt(encrypted_data)
         return json.loads(decrypted_data.decode())
@@ -44,8 +51,7 @@ class DataManager:
         json_data = json.dumps(data).encode()
         encrypted_data = fernet.encrypt(json_data)
 
-        with open(filename, "wb") as f:
-            f.write(encrypted_data)
+        with open(filename, "wb") as f: f.write(encrypted_data)
 
     def get_profile(self, username: str, password: str) -> Profile | str:
 
@@ -61,18 +67,14 @@ class DataManager:
         target_data = json.loads(target_data.decode())  # convert back into dict
 
         if target_data["password"] != password: return "Incorrect password"
-
         return Profile(self, username, target_key, target_data)
 
     def create_profile(self, username, password) -> str:
-
-        if username in self.__profile_datas.keys():
-            return "Profile already exists"
+        if username in self.__profile_datas.keys(): return "Profile already exists"
 
         new_key = Fernet.generate_key()
-
         fernet = Fernet(new_key)
-        data = fernet.encrypt(json.dumps({"password": password, "Saved stocks": []}).encode()).decode("utf-8")
+        data = fernet.encrypt(json.dumps({"password": password, "Saved stocks": [], "Risk tolerance": 5}).encode()).decode("utf-8")
         self.__profile_datas[username] = data
         with open(self.__data_file, "w") as f: json.dump(self.__profile_datas, f)
 
@@ -81,14 +83,14 @@ class DataManager:
 
         return "Profile created"
 
-
-    def save_profile_data(self, username: str, key: bytes, data: dict):
-        data_to_save = data
+    def save_profile_data(self, profile: Profile, password: str, key: bytes):
+        if not profile.validate_password(password): return
+        data_to_save = profile.get_data(); data_to_save["password"] = password
         fernet = Fernet(key)
         json_data = json.dumps(data_to_save).encode()
         encrypted_data = fernet.encrypt(json_data).decode("utf-8")
 
-        self.__profile_datas[username] = encrypted_data
+        self.__profile_datas[profile.get_username()] = encrypted_data
         with open(self.__data_file, "w") as f: json.dump(self.__profile_datas, f)
 
 
@@ -96,16 +98,20 @@ class DataManager:
 
 if __name__ in "__main__":
     manage = DataManager()
-    data = manage.get_profile("username3", "password")
-    if data == "Non-existent profile":
+    manage.create_profile("/", "/")
+    pro = manage.get_profile("/", "/")
+    if pro == "Non-existent profile":
         print("Profile data is non-existent")
-    elif data == "Incorrect password":
+    elif pro == "Incorrect password":
         print("Incorrect password")
     else:
-        print(data.get_data())
-        print(data.get_username())
+        print(pro.get_data())
+        print(pro.get_username())
 
-    manage.create_profile("username3", "password") # print( ... ) -> profile already exists
+    pr = manage.get_profile("/", "/")
+    pr.update_data({"Risk tolerance": 3})
+    print(pr.get_data())
+    print(pr.get_data()["Risk tolerance"])
 
     # profile = manage.get_profile("username3", "password")
     # print(profile.get_data())

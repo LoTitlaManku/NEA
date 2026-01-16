@@ -174,7 +174,8 @@ class BackgroundUpdater:
                 ledger.at[idx, 'Is_Correct'] = (direction_correct and price_accurate)
                 updated = True
 
-            elif target_date.weekday() >= 5 or not time(13, 30) <= target_date.time() <= time(21, 30):
+            # If predicted date outside market hours set invalid (unless time is 00:00 as 1d predictions set time to 00:00 for data consistency)
+            elif (target_date.weekday() >= 5 or not time(13, 30) <= target_date.time() <= time(21, 30)) and target_date.time() != time(0,0):
                 ledger.at[idx, "Actual_Price"] = "Invalid date"
                 ledger.at[idx, "Is_Correct"] = "Invalid date"
                 updated = True
@@ -343,13 +344,16 @@ class TrainingManager:
             'raw_predictions': test_predictions, 'trained_model_object': model, 'feature_scaler': data_normalizer}
 
     # Save models for all horizons with the best performing model type
-    def _save_winning_strategy_assets(self, ticker, interval, best_model_dict, features_data, targets_dataframe):
+    def _save_winning_strategy_assets(self, ticker, interval, full_results, features_data, targets_dataframe):
         # Create the folder for this specific stock's model data to save
         save_folder = os.path.join("saved_models", f"{ticker}_{interval}")
         if not os.path.exists(save_folder): os.makedirs(save_folder)
 
         # Save the names of indicators used
         joblib.dump(list(features_data.columns), f"{save_folder}/features.pkl")
+
+        # Pick best model based on sharpe value
+        best_model_dict = max(full_results, key=lambda result: result['absolute_sharpe'])
 
         # Save the tool that normalizes data
         if 'feature_scaler' in best_model_dict:
@@ -361,10 +365,13 @@ class TrainingManager:
             joblib.dump(standardizer, f"{save_folder}/scaler.pkl")
 
         # Save metadata that describes the model
-        meta = ({k: v for k,v in best_model_dict.items() if k not in ["raw_predictions", "trained_model_object", "feature_scaler"]}
-                | {"training_data": datetime.now().strftime("%Y-%m-%d")})
-        # Convert numpy objects to standard python types due to json compatibility issues
-        for key,value in meta.items(): meta.update({key: value.item() if hasattr(value, 'item') else value})
+        # Filter keys and convert numpy objects to standard python types
+        meta = {
+            "results": [{k: (v.item() if hasattr(v, 'item') else v) for k, v in d.items() if k not in {"raw_predictions", "trained_model_object", "feature_scaler"} }
+                    for d in full_results],
+            "training date": datetime.now().strftime("%Y-%m-%d"),
+            "best model": best_model_dict["model_type"]
+        }
         with open(f'{save_folder}/metadata.json', 'w') as f: json.dump(meta, f)
 
         # Save winning model for each horizon
@@ -401,7 +408,7 @@ class TrainingManager:
         if os.path.exists(model_path): shutil.rmtree(model_path)
 
         # Train and build models for ticker
-        print(f"\n{'=' * 20} Training {ticker} {'=' * 20}")
+        # print(f"\n{'=' * 20} Training {ticker} {'=' * 20}")
 
         # Load data and add indicators
         data = load_data(ticker, interval)
@@ -425,7 +432,7 @@ class TrainingManager:
         targets_train, targets_test = train_data[f'target_cls_1{period}'], test_data[f'target_cls_1{period}']
         actual_returns_test = test_data['return'].values
 
-        print(f"Training set: {len(train_data)} samples | Test set: {len(test_data)} samples")
+        # print(f"Training set: {len(train_data)} samples | Test set: {len(test_data)} samples")
         # Model competition
         results = [
             self._train_lightgbm(features_train, targets_train, features_test, targets_test, actual_returns_test),
@@ -434,33 +441,34 @@ class TrainingManager:
         ]
 
         # Pick best model based on sharpe value
-        winning_dict = max(results, key=lambda result: result['absolute_sharpe'])
+        # winning_dict = max(results, key=lambda result: result['absolute_sharpe'])
 
-        print(f"\nModel Performance for {ticker}:")
+        # print(f"\nModel Performance for {ticker}:")
         for r in results:
-            print(f"  {r['model_type']:6} - Acc: {r['accuracy']:.1%} | WF Acc: {r['walk_forward_accuracy']:.1%} | Sharpe: {r['absolute_sharpe']:.2f}")
+            # print(f"  {r['model_type']:6} - Acc: {r['accuracy']:.1%} | WF Acc: {r['walk_forward_accuracy']:.1%} | Sharpe: {r['absolute_sharpe']:.2f}")
             # A model is 'Stable' if the test accuracy is close to the walk-forward accuracy
             stability = abs(r['accuracy'] - r['walk_forward_accuracy'])
-            if stability > 0.15:
-                print(f"Warning: {r['model_type']} is unstable (Acc diff: {stability:.2f})")
+            r["stability"] = stability
+            # if stability > 0.15:
+                # print(f"Warning: {r['model_type']} is unstable (Acc diff: {stability:.2f})")
 
-        print(f"\nWINNER: {winning_dict['model_type']} (Sharpe: {winning_dict['absolute_sharpe']:.2f})")
+        # print(f"\nWINNER: {winning_dict['model_type']} (Sharpe: {winning_dict['absolute_sharpe']:.2f})")
 
         # Save winning model data
-        self._save_winning_strategy_assets(ticker, interval, winning_dict, features_train, train_data)
+        self._save_winning_strategy_assets(ticker, interval, results, features_train, train_data)
 
         # Debug print results
-        final_report = [{
-            'Ticker': ticker,
-            'Best Model': winning_dict['model_type'] if winning_dict['absolute_sharpe'] >= self.sharpe_threshold else 'OUT',
-            'Sharpe': f"{winning_dict['absolute_sharpe']:.2f}",
-            'Rule': "Flip" if winning_dict['logic_flipped'] else "Direct",
-            'Test Acc': f"{winning_dict['accuracy']:.1%}"
-        }]
-        print("\n" + "=" * 65)
-        print("FINAL RESEARCH REPORT")
-        print("=" * 65)
-        print(pd.DataFrame(final_report).to_markdown())
+        # final_report = [{
+        #     'Ticker': ticker,
+        #     'Best Model': winning_dict['model_type'] if winning_dict['absolute_sharpe'] >= self.sharpe_threshold else 'OUT',
+        #     'Sharpe': f"{winning_dict['absolute_sharpe']:.2f}",
+        #     'Rule': "Flip" if winning_dict['logic_flipped'] else "Direct",
+        #     'Test Acc': f"{winning_dict['accuracy']:.1%}"
+        # }]
+        # print("\n" + "=" * 65)
+        # print("FINAL RESEARCH REPORT")
+        # print("=" * 65)
+        # print(pd.DataFrame(final_report).to_markdown())
 
         return True
 
@@ -514,7 +522,7 @@ def load_prediction(ticker: str, interval: str, date: datetime):
     forecast_results = {}
     for i, horizon in zip(range(0,3), [1,5,21]):
         forecast_results[horizon] = {
-            "current_price": float(match_dicts[i]['current_price']),
+            "current_price": float(match_dicts[i]['Current_Price']),
             'price': float(match_dicts[i]['Predicted_Price']),
             'up': float(match_dicts[i]['Predicted_Max']),
             'lo': float(match_dicts[i]['Predicted_Min']),
@@ -538,7 +546,7 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
 
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str):
-    try:
+    # try:
         # Add in technical indicators
         df, processed_df, assets = prepare_prediction_data(ticker, interval)
         if any(v is None for v in [df, processed_df, assets]): return
@@ -552,7 +560,8 @@ def run_prediction_pipline(ticker: str, interval: str):
                     float(df['Close'].iloc[-1])    ) # horizons, offsets, delta_type, period, last_trade_date, current_price
 
         # Load or create and save the prediction
-        if not prediction_saved(ticker, interval, last_trade_date):
+        # if not prediction_saved(ticker, interval, last_trade_date):
+        if True:
             forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
             save_prediction(ticker, interval, last_trade_date, forecast_results)
         else:
@@ -560,7 +569,7 @@ def run_prediction_pipline(ticker: str, interval: str):
 
         # Graph the prediction
         # render_graph(ticker, interval, df, forecast_results, tech_info)
-    except Exception as e: print(f"Error - {type(e).__name__}: {e}")
+    # except Exception as e: print(f"Error - {type(e).__name__}: {e}")
 
 # Adds in technical indicators, trains model if needed or loads it
 def prepare_prediction_data(ticker: str, interval: str):
@@ -572,10 +581,10 @@ def prepare_prediction_data(ticker: str, interval: str):
 
     # Trains a model if needed
     p = "h" if "h" in interval else "d"
-    if not all(os.path.exists(os.path.join(model_path, f)) for f in
-               [f"cls_1{p}.pkl", f"cls_5{p}.pkl", f"cls_21{p}.pkl", f"reg_1{p}.pkl", f"reg_5{p}.pkl", f"reg_21{p}.pkl", "features.pkl", "scaler.pkl"]):
-        #, "metadata.json"]):     add back in after batch testing
-        print(f"Empty or missing trained models found for {ticker}. Training...")
+    # if not all(os.path.exists(os.path.join(model_path, f)) for f in
+    #            [f"cls_1{p}.pkl", f"cls_5{p}.pkl", f"cls_21{p}.pkl", f"reg_1{p}.pkl", f"reg_5{p}.pkl", f"reg_21{p}.pkl", "features.pkl", "scaler.pkl", "metadata.json"]):
+    if True:
+        # print(f"Empty or missing trained models found for {ticker}. Training...")
         success = TrainingManager().run_training_pipeline(ticker, interval)
         if not success: return None, None, None
 
@@ -681,9 +690,9 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
 
 def main():
     # Temp app to run background updater (with main gui will be unneeded)
-    qt_app = QApplication.instance()
-    if not qt_app: qt_app = QApplication(sys.argv)
-    updater = BackgroundUpdater()
+    # qt_app = QApplication.instance()
+    # if not qt_app: qt_app = QApplication(sys.argv)
+    # updater = BackgroundUpdater()
 
     # Run main logic
     # while True:
@@ -705,20 +714,20 @@ def main():
 
     # TESTING code (runs predictions on all saved models)
     import time
-    model_folders = os.listdir("saved_models")
+    model_folders = [f for f in os.listdir("saved_models") if f.upper() > "SSRM"]
     start_time = time.time()
     success_count, fail_count = 0, 0
     for folder_name in tqdm(model_folders, desc="Predicting Stocks", unit="ticker"):
-        try:
+        # try:
             parts = folder_name.split("_")
             ticker, interval = parts[0], parts[1]
 
             run_prediction_pipline(ticker, interval)
             success_count += 1
 
-        except Exception as e:
-            print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
-            fail_count += 1
+        # except Exception as e:
+        #     print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
+        #     fail_count += 1
 
     print(f"Total Processed: {len(model_folders)}")
     print(f"Successful:      {success_count}")

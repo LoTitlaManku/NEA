@@ -36,7 +36,9 @@ class DataManager:
         if not os.path.exists(self.__key_file): self.save_encrypt_file(self.__key_file, {}, self.__master_key)
         if not os.path.exists(self.__data_file): json.dump({}, open(self.__data_file, "w"))
 
+        # {username: key, username: key ...}
         self.__keys = self.load_decrypt_file(self.__key_file, self.__master_key)
+        # {username: <encrypted data> ...}
         with open(self.__data_file, "r") as f: self.__profile_datas = json.load(f)
 
     def load_decrypt_file(self, filename: str, key: bytes) -> dict:
@@ -93,7 +95,18 @@ class DataManager:
         self.__profile_datas[profile.get_username()] = encrypted_data
         with open(self.__data_file, "w") as f: json.dump(self.__profile_datas, f)
 
+    def delete_profile(self, profile: Profile, password: str) -> bool | str:
+        if not isinstance(profile, Profile): return False
+        if not profile.validate_password(password): return "Incorrect password"
 
+        # Remove entries for that username in keys and data
+        self.__keys.pop(profile.get_username(), None)
+        self.__profile_datas.pop(profile.get_username(), None)
+
+        # Save files without removed data
+        self.save_encrypt_file(self.__key_file, self.__keys, self.__master_key)
+        with open(self.__data_file, "w") as f: json.dump(self.__profile_datas, f)
+        return True
 
 
 if __name__ in "__main__":

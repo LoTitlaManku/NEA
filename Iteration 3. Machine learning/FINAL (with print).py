@@ -38,14 +38,14 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     if not os.path.exists("stock_data_cache"): os.makedirs("stock_data_cache")
     cache_file = os.path.join("stock_data_cache", f"{ticker}_{interval}.csv")
     if os.path.exists(cache_file):
-        # print(f"[CACHE] loaded {ticker}:{interval}")
+        print(f"[CACHE] loaded {ticker}:{interval}")
         df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
         df.index.name = "Date"
         df.index = pd.to_datetime(df.index).tz_localize(None)
         return df
 
     # Downloads the appropriate data from yahoo finance
-    # print(f"Downloading {ticker} for {interval}")
+    print(f"Downloading {ticker} for {interval}")
     try: data = yf.download(ticker, period="max", interval=interval, progress=False, auto_adjust=False)
     except: return None
 
@@ -412,6 +412,8 @@ class TrainingManager:
         if os.path.exists(model_path): shutil.rmtree(model_path)
 
         # Train and build models for ticker
+        print(f"\n{'=' * 20} Training {ticker} {'=' * 20}")
+
         # Load data and add indicators
         data = load_data(ticker, interval)
         if data is None: print("No data"); return False
@@ -434,6 +436,7 @@ class TrainingManager:
         targets_train, targets_test = train_data[f'target_cls_1{period}'], test_data[f'target_cls_1{period}']
         actual_returns_test = test_data['return'].values
 
+        print(f"Training set: {len(train_data)} samples | Test set: {len(test_data)} samples")
         # Model competition
         results = [
             self._train_lightgbm(features_train, targets_train, features_test, targets_test, actual_returns_test),
@@ -441,13 +444,33 @@ class TrainingManager:
             self._train_support_vector(features_train, targets_train, features_test, targets_test, actual_returns_test)
         ]
 
+        print(f"\nModel Performance for {ticker}:")
         for r in results:
+            print(f"  {r['model_type']:6} - Acc: {r['accuracy']:.1%} | WF Acc: {r['walk_forward_accuracy']:.1%} | Sharpe: {r['absolute_sharpe']:.2f}")
             # A model is 'Stable' if the test accuracy is close to the walk-forward accuracy
             stability = abs(r['accuracy'] - r['walk_forward_accuracy'])
             r["stability"] = stability
+            if stability > 0.15: print(f"Warning: {r['model_type']} is unstable (Acc diff: {stability:.2f})")
+
+        # Pick best model based on sharpe value
+        winning_dict = max(results, key=lambda result: result['absolute_sharpe'])
+        print(f"\nWINNER: {winning_dict['model_type']} (Sharpe: {winning_dict['absolute_sharpe']:.2f})")
 
         # Save winning model data
         self._save_winning_strategy_assets(ticker, interval, results, features_train, train_data)
+
+        # Debug print results
+        final_report = [{
+            'Ticker': ticker,
+            'Best Model': winning_dict['model_type'] if winning_dict['absolute_sharpe'] >= self.sharpe_threshold else 'OUT',
+            'Sharpe': f"{winning_dict['absolute_sharpe']:.2f}",
+            'Rule': "Flip" if winning_dict['logic_flipped'] else "Direct",
+            'Test Acc': f"{winning_dict['accuracy']:.1%}"
+        }]
+        print("\n" + "=" * 65)
+        print("FINAL RESEARCH REPORT")
+        print("=" * 65)
+        print(pd.DataFrame(final_report).to_markdown())
 
         return True
 
@@ -525,7 +548,7 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
 
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str):
-    # try:
+    try:
         # Add in technical indicators
         df, processed_df, assets = prepare_prediction_data(ticker, interval)
         if any(v is None for v in [df, processed_df, assets]): return
@@ -547,8 +570,8 @@ def run_prediction_pipline(ticker: str, interval: str):
         else: forecast_results = load_prediction(ticker, interval, last_trade_date)
 
         # Graph the prediction
-        # render_graph(ticker, interval, df, forecast_results, tech_info)
-    # except Exception as e: print(f"Error - {type(e).__name__}: {e}")
+        render_graph(ticker, interval, df, forecast_results, tech_info)
+    except Exception as e: print(f"Error - {type(e).__name__}: {e}")
 
 # Adds in technical indicators, trains model if needed or loads it
 def prepare_prediction_data(ticker: str, interval: str):
@@ -585,9 +608,9 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
     forecast_results = {}
 
     # Calculate and display forecasts
-    # print(f"\n" + "=" * 40)
-    # print(f"LIVE PREDICTION FOR {ticker} ({interval})")
-    # print("=" * 40)
+    print(f"\n" + "=" * 40)
+    print(f"LIVE PREDICTION FOR {ticker} ({interval})")
+    print("=" * 40)
     for time_key in horizons.keys():
         # Load the specific model for this timeframe
         directional_classifier = joblib.load(f"{model_path}/cls_{time_key}{period}.pkl")
@@ -614,8 +637,8 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
             'conf': confidence,
             'dir': direction
         }
-        # print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
-    # print("=" * 40 + "\n")
+        print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
+    print("=" * 40 + "\n")
 
     return forecast_results
 
@@ -673,11 +696,11 @@ def main():
     updater = BackgroundUpdater()
 
     # Run main logic
-    # while True:
-    #     while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
-    #     while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
-    #
-    #     run_prediction_pipline(ticker, interval)
+    while True:
+        while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
+        while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
+
+        run_prediction_pipline(ticker, interval)
 
     # TESTING code (runs predictions on 500 random stocks)
     # import random
@@ -691,29 +714,29 @@ def main():
     # print(datetime.now())
 
     # TESTING code (runs predictions on all saved models)
-    import time
-    model_folders = os.listdir("saved_models")
-    start_time = time.time()
-    success_count, fail_count = 0, 0
-    for folder_name in tqdm(model_folders, desc="Predicting Stocks", unit="ticker"):
-        try:
-            parts = folder_name.split("_")
-            ticker, interval = parts[0], parts[1]
-
-            run_prediction_pipline(ticker, interval)
-            success_count += 1
-
-        except Exception as e:
-            print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
-            fail_count += 1
-
-        # To avoid rate limits
-        time.sleep(0.5)
-
-    print(f"Total Processed: {len(model_folders)}")
-    print(f"Successful:      {success_count}")
-    print(f"Failed:          {fail_count}")
-    print(f"Total Time:      {(time.time() - start_time) / 60:.2f} minutes")
+    # import time
+    # model_folders = os.listdir("saved_models")
+    # start_time = time.time()
+    # success_count, fail_count = 0, 0
+    # for folder_name in tqdm(model_folders, desc="Predicting Stocks", unit="ticker"):
+    #     try:
+    #         parts = folder_name.split("_")
+    #         ticker, interval = parts[0], parts[1]
+    #
+    #         run_prediction_pipline(ticker, interval)
+    #         success_count += 1
+    #
+    #     except Exception as e:
+    #         print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
+    #         fail_count += 1
+    #
+    #     # To avoid rate limits
+    #     time.sleep(0.5)
+    #
+    # print(f"Total Processed: {len(model_folders)}")
+    # print(f"Successful:      {success_count}")
+    # print(f"Failed:          {fail_count}")
+    # print(f"Total Time:      {(time.time() - start_time) / 60:.2f} minutes")
 
 
 if __name__ == "__main__":

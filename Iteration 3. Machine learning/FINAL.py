@@ -180,7 +180,9 @@ class BackgroundUpdater:
                 ledger.at[idx, "Is_Correct"] = "Invalid date"
                 updated = True
 
-        if updated: ledger.to_csv(ledger_path, index=False)
+        if updated:
+            ledger['Target_Date'] = ledger['Target_Date'].dt.strftime('%Y-%m-%d %H:%M')
+            ledger.to_csv(ledger_path, index=False)
 
 ############################################################################
 
@@ -196,6 +198,7 @@ class TrainingManager:
     def _get_sentiment_score(ticker: str):
         try:
             stock = yf.Ticker(ticker); news = stock.news
+            if not news: return 0.0
             return np.mean([SentimentIntensityAnalyzer().polarity_scores(n['title'])['compound'] for n in news[:8]])
         except: return 0.0
 
@@ -585,9 +588,10 @@ def prepare_prediction_data(ticker: str, interval: str):
         if not TrainingManager().run_training_pipeline(ticker, interval): return None, None, None
 
     # Load assets
+    processed_df = TrainingManager().calculate_technical_indicators(df.copy(), ticker, interval)
+    if processed_df.empty: return None, None, None
     scaler = joblib.load(f"{model_path}/scaler.pkl")
     features = joblib.load(f"{model_path}/features.pkl")
-    processed_df = TrainingManager().calculate_technical_indicators(df.copy(), ticker, interval)
 
     return df, processed_df, (scaler, features, model_path)
 
@@ -724,6 +728,9 @@ def main():
         except Exception as e:
             print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
             fail_count += 1
+
+        # To avoid rate limits
+        time.sleep(0.5)
 
     print(f"Total Processed: {len(model_folders)}")
     print(f"Successful:      {success_count}")

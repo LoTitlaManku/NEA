@@ -440,18 +440,16 @@ class TrainingManager:
             self._train_support_vector(features_train, targets_train, features_test, targets_test, actual_returns_test)
         ]
 
-        # Pick best model based on sharpe value
-        # winning_dict = max(results, key=lambda result: result['absolute_sharpe'])
-
         # print(f"\nModel Performance for {ticker}:")
         for r in results:
             # print(f"  {r['model_type']:6} - Acc: {r['accuracy']:.1%} | WF Acc: {r['walk_forward_accuracy']:.1%} | Sharpe: {r['absolute_sharpe']:.2f}")
             # A model is 'Stable' if the test accuracy is close to the walk-forward accuracy
             stability = abs(r['accuracy'] - r['walk_forward_accuracy'])
             r["stability"] = stability
-            # if stability > 0.15:
-                # print(f"Warning: {r['model_type']} is unstable (Acc diff: {stability:.2f})")
+            # if stability > 0.15: print(f"Warning: {r['model_type']} is unstable (Acc diff: {stability:.2f})")
 
+        # Pick best model based on sharpe value
+        # winning_dict = max(results, key=lambda result: result['absolute_sharpe'])
         # print(f"\nWINNER: {winning_dict['model_type']} (Sharpe: {winning_dict['absolute_sharpe']:.2f})")
 
         # Save winning model data
@@ -551,21 +549,21 @@ def run_prediction_pipline(ticker: str, interval: str):
         df, processed_df, assets = prepare_prediction_data(ticker, interval)
         if any(v is None for v in [df, processed_df, assets]): return
 
-        # Create a dict with basic information about the state of the prediction and stock
-        is_hour = "h" in interval
         last_trade_date = df.index[-1]
-        tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
-                    {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
-                    "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
-                    float(df['Close'].iloc[-1])    ) # horizons, offsets, delta_type, period, last_trade_date, current_price
 
         # Load or create and save the prediction
-        # if not prediction_saved(ticker, interval, last_trade_date):
-        if True:
+        if not prediction_saved(ticker, interval, last_trade_date):
+            # Create a dict with basic information about the state of the prediction and stock
+            is_hour = "h" in interval
+            tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
+                         {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
+                         "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
+                         float(df['Close'].iloc[
+                                   -1]))  # horizons, offsets, delta_type, period, last_trade_date, current_price
+
             forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
             save_prediction(ticker, interval, last_trade_date, forecast_results)
-        else:
-            forecast_results = load_prediction(ticker, interval, last_trade_date)
+        else: forecast_results = load_prediction(ticker, interval, last_trade_date)
 
         # Graph the prediction
         # render_graph(ticker, interval, df, forecast_results, tech_info)
@@ -581,12 +579,10 @@ def prepare_prediction_data(ticker: str, interval: str):
 
     # Trains a model if needed
     p = "h" if "h" in interval else "d"
-    # if not all(os.path.exists(os.path.join(model_path, f)) for f in
-    #            [f"cls_1{p}.pkl", f"cls_5{p}.pkl", f"cls_21{p}.pkl", f"reg_1{p}.pkl", f"reg_5{p}.pkl", f"reg_21{p}.pkl", "features.pkl", "scaler.pkl", "metadata.json"]):
-    if True:
-        # print(f"Empty or missing trained models found for {ticker}. Training...")
-        success = TrainingManager().run_training_pipeline(ticker, interval)
-        if not success: return None, None, None
+    if not all(os.path.exists(os.path.join(model_path, f)) for f in
+               [f"cls_1{p}.pkl", f"cls_5{p}.pkl", f"cls_21{p}.pkl", f"reg_1{p}.pkl", f"reg_5{p}.pkl", f"reg_21{p}.pkl", "features.pkl", "scaler.pkl", "metadata.json"]):
+        print(f"Empty or missing trained models found for {ticker}. Training...")
+        if not TrainingManager().run_training_pipeline(ticker, interval): return None, None, None
 
     # Load assets
     scaler = joblib.load(f"{model_path}/scaler.pkl")
@@ -690,9 +686,9 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
 
 def main():
     # Temp app to run background updater (with main gui will be unneeded)
-    # qt_app = QApplication.instance()
-    # if not qt_app: qt_app = QApplication(sys.argv)
-    # updater = BackgroundUpdater()
+    qt_app = QApplication.instance()
+    if not qt_app: qt_app = QApplication(sys.argv)
+    updater = BackgroundUpdater()
 
     # Run main logic
     # while True:
@@ -714,20 +710,20 @@ def main():
 
     # TESTING code (runs predictions on all saved models)
     import time
-    model_folders = [f for f in os.listdir("saved_models") if f.upper() > "SSRM"]
+    model_folders = os.listdir("saved_models")
     start_time = time.time()
     success_count, fail_count = 0, 0
     for folder_name in tqdm(model_folders, desc="Predicting Stocks", unit="ticker"):
-        # try:
+        try:
             parts = folder_name.split("_")
             ticker, interval = parts[0], parts[1]
 
             run_prediction_pipline(ticker, interval)
             success_count += 1
 
-        # except Exception as e:
-        #     print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
-        #     fail_count += 1
+        except Exception as e:
+            print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
+            fail_count += 1
 
     print(f"Total Processed: {len(model_folders)}")
     print(f"Successful:      {success_count}")
@@ -735,15 +731,6 @@ def main():
     print(f"Total Time:      {(time.time() - start_time) / 60:.2f} minutes")
 
 
-    # run_prediction_pipline("AAPL", "1d")
-
 if __name__ == "__main__":
     main()
 
-
-
-"""
-Line 573 remember to add "metadata.json" to file list 
--> currently excluded as first few days of prediction dont contain this file
-
-"""

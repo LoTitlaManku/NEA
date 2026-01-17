@@ -2,9 +2,12 @@
 import os
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
+
+pd.set_option('future.no_silent_downcasting', True)
 
 ledger_folder = "saved_predictions"
-for filename in os.listdir(ledger_folder):
+for filename in tqdm(os.listdir(ledger_folder), desc="Cleaning ledgers", unit="ledger"):
     try:
         ticker = filename.split("_")[0]
         filepath = os.path.join(ledger_folder, filename)

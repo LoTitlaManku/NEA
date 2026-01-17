@@ -5,4 +5,4 @@ stock_data_cache/
 saved_models/
 
 # Ignore saved predictions
-saved_predictions
+saved_predictions/

@@ -2,17 +2,15 @@
 import io
 import sys
 import json
-from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QCursor, QImage
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy,
-                             QWidget, QLabel, QFrame, QPushButton, QDialog, QMenu, QLineEdit, QSlider, QScrollArea, QMessageBox, QInputDialog, QFileDialog)
-from pandas.core.internals import DataManager
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QMessageBox, QInputDialog, QFileDialog,
+                             QWidget, QLabel, QFrame, QPushButton, QDialog, QMenu, QLineEdit, QSlider, QScrollArea)
 
-from profile import Profile, DataManager
+from profile import Profile
 from load_data import peek_data, validate_ticker
 
 
@@ -389,6 +387,7 @@ class ProfileWindow(QDialog):
 
 
 if __name__ == "__main__":
+    # from profile import DataManager
     # p = DataManager().get_profile("/", "/")
     # p.update_data({"Saved stocks": ["AAPL", "TSLA", "NVDA"]})
     from main_gui import MainWindow

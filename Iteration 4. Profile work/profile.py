@@ -56,7 +56,6 @@ class DataManager:
         with open(filename, "wb") as f: f.write(encrypted_data)
 
     def get_profile(self, username: str, password: str) -> Profile | str:
-
         target_key = self.__keys.get(username) # key as string
         if target_key is None: return "Non-existent profile"
         target_key = target_key.encode("utf-8")  # key string to bytes

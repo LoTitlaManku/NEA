@@ -1,8 +1,8 @@
 import sys
 import json
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath, QMouseEvent
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPainter, QPixmap, QPainterPath
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy,
                              QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider, QMessageBox, QInputDialog, QFileDialog)
 
@@ -50,12 +50,13 @@ class ProfileWindow(QDialog):
         edit_frame = QFrame(); edit_frame.setStyleSheet("border: 1px solid black")
         edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(0,0,0,0); edit_layout.setSpacing(0)
 
+        logout_btn = self.make_indv_btn("logout_btn", "img_src/logout.png")
         change_profile_btn = self.make_indv_btn("change_profile_btn", "img_src/change_profile_icon.png")
         export_data_btn = self.make_indv_btn("export_data_btn", "img_src/export_data.png")
         import_data_btn = self.make_indv_btn("import_data_btn", "img_src/import_data.png")
         delete_profile_btn = self.make_indv_btn("delete_profile_btn", "img_src/delete.png")
 
-        edit_layout.addWidget(change_profile_btn); edit_layout.addWidget(export_data_btn)
+        edit_layout.addWidget(logout_btn); edit_layout.addWidget(change_profile_btn); edit_layout.addWidget(export_data_btn)
         edit_layout.addWidget(import_data_btn); edit_layout.addWidget(delete_profile_btn)
 
         # Risk slider widget
@@ -90,7 +91,9 @@ class ProfileWindow(QDialog):
     def testfunc(self, btn: QPushButton) -> None:
         # Temporary function to test button click activation
         print("testfunc", btn.name)
-        if btn.name == "change_profile_btn":
+        if btn.name == "logout_btn":
+            self.logout()
+        elif btn.name == "change_profile_btn":
             self.change_profile()
         elif btn.name == "export_data_btn":
             self.export_profile()
@@ -98,6 +101,12 @@ class ProfileWindow(QDialog):
             self.import_profile()
         elif btn.name == "delete_profile_btn":
             self.delete_profile()
+
+    def logout(self):
+        self.parent_window.current_profile = None; self.parent_window.logged_in = False
+        self.parent_window.status_label.setText(f"Not logged in")
+        QMessageBox.information(self, "Success", "Logged out.")
+        self.accept()
 
     def change_profile(self):
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
@@ -112,7 +121,7 @@ class ProfileWindow(QDialog):
             self.parent_window.status_label.setText(f"Status: Logged In as {username}")
             QMessageBox.information(self, "Success", "Profile changed."); self.accept()
 
-        elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist.")
+        elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist. Go back to main menu to create new.")
         elif result == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
         else:
             # Catch all other DataManager string error results
@@ -122,12 +131,12 @@ class ProfileWindow(QDialog):
         password, ok = QInputDialog.getText(self, "Security check", f"Enter Password for {self.profile.get_username()}:", QLineEdit.EchoMode.Password)
         if not ok: return
 
+        confirmation = QMessageBox.question(self, "Confirm Action", "Are you sure you want to proceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        if confirmation != QMessageBox.StandardButton.Yes: return
+
         success = self.parent_window.data_manager.delete_profile(self.profile, password)
         if success is True:
-            confirmation = QMessageBox.question(self, "Confirm Action", "Are you sure you want to proceed?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-            if confirmation != QMessageBox.StandardButton.Yes: return
-
             self.parent_window.current_profile = None; self.parent_window.logged_in = False
             self.parent_window.status_label.setText(f"Not logged in")
             QMessageBox.information(self, "Success", "Profile deleted.")

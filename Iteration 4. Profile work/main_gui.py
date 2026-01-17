@@ -179,8 +179,7 @@ class MainWindow(QMainWindow):
             self.hide()
             self.profile_window = ProfileWindow(self, self.current_profile)
             self.profile_window.exec()
-        else:
-            self.login_window()
+        else: self.login_window()
 
     def login_window(self):
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")

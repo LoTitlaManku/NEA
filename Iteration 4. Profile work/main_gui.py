@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout
 from profile import DataManager, Profile
 from profile_gui import ProfileWindow
 
+############################################################################
 
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()

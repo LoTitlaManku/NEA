@@ -181,6 +181,7 @@ class BackgroundUpdater:
                 updated = True
 
         if updated:
+            # Change dates back into strings for consistent formatting
             ledger['Target_Date'] = ledger['Target_Date'].dt.strftime('%Y-%m-%d %H:%M')
             ledger.to_csv(ledger_path, index=False)
 

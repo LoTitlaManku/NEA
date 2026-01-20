@@ -14,6 +14,7 @@ from tqdm import tqdm
 import yfinance as yf
 import talib
 from datetime import timedelta, datetime, timezone, time
+import time
 # machine learning models imports
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
@@ -124,6 +125,9 @@ class BackgroundUpdater:
                         updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
                         updated_df.to_csv(cache_file)
             except Exception as e: print(f"Error - {type(e).__name__} {e}")
+
+            # To avoid rate limits
+            import random; time.sleep(random.uniform(0.05, 0.5))
 
     # Checks predictions for dates that have passed
     def accuracy_check(self):
@@ -691,7 +695,6 @@ def main():
     # print(datetime.now())
 
     # TESTING code (runs predictions on all saved models)
-    import time
     model_folders = os.listdir("saved_models")
     start_time = time.time()
     success_count, fail_count = 0, 0
@@ -706,9 +709,6 @@ def main():
         except Exception as e:
             print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
             fail_count += 1
-
-        # To avoid rate limits
-        time.sleep(0.5)
 
     print(f"Total Processed: {len(model_folders)}")
     print(f"Successful:      {success_count}")

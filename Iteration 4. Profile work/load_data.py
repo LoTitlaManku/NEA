@@ -31,6 +31,7 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     data.to_csv(cache_file, index=True)
     return data
 
+# Load the latest n days for a given stock and interval
 def peek_data(ticker: str, days: int, interval: str = "15m") -> pd.DataFrame | None:
     cache_file = os.path.join("stock_data_cache", f"{ticker}_{interval}.csv")
     if not os.path.exists(cache_file): load_data(ticker, interval)
@@ -44,11 +45,10 @@ def peek_data(ticker: str, days: int, interval: str = "15m") -> pd.DataFrame | N
     cutoff_date = df.index.max() - pd.Timedelta(days=days)
     return df[df.index >= cutoff_date]
 
+# Check whether a ticker is valid
 def validate_ticker(ticker: str) -> bool:
     stock = yf.Ticker(ticker)
     data = stock.history(period="1d")
     return not data.empty
-
-
 
 

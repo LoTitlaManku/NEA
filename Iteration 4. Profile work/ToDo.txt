@@ -1,0 +1,6 @@
+
+
+
+- Add context actions to the bigger cards in the profile gui
+
+- Add profile image import

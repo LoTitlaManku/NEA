@@ -4,8 +4,10 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath, QMouseEvent
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QMessageBox, QInputDialog,
                              QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider)
+
 from profile import DataManager, Profile
 from profile_gui import ProfileWindow
+from custom_button import CustomButton
 
 ############################################################################
 
@@ -24,7 +26,6 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1500, 900)
         self.setStyleSheet("QWidget {background-color: white; color: black;}")
         self.btns = {"left_btns": [], "top_btns": [], "prediction_type_btns": [], "time_period_btns": [], "confirmation_btns": []}
-        self.colours = {"Default": "#e3e3e3", "Hover": "#adadad", "Clicked": "#858585"}
 
         # Initialize the profile logic
         self.data_manager = DataManager()
@@ -44,11 +45,10 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_frame); left_layout.setContentsMargins(0 ,0 ,0 ,0); left_layout.setSpacing(0)
 
         # Define tool buttons
-        mouse_btn = self.make_img_grp_btn("mouse_tool", "left_btns", "img_src/mouse_icon_scaled.png", height=100)
-        line_tool_btn = self.make_img_grp_btn("line_tool", "left_btns", "img_src/line_icon_scaled.png", height=100)
-        notes_tool_btn = self.make_img_grp_btn("notes_tool", "left_btns", "img_src/notes_icon_scaled.png", height=100)
+        tool_btns = [("mouse_tool", "img_src/mouse_icon_scaled.png"), ("line_tool", "img_src/line_icon_scaled.png"), ("notes_tool", "img_src/notes_icon_scaled.png")]
+        for name, img in tool_btns: left_layout.addWidget(CustomButton(name, "left_btns", "img_grp", parent=self, img=img, height=100))
+        left_layout.addStretch()
 
-        left_layout.addWidget(mouse_btn); left_layout.addWidget(line_tool_btn); left_layout.addWidget(notes_tool_btn); left_layout.addStretch()
         return left_frame
 
     def build_center_frame(self) -> QFrame:
@@ -59,25 +59,12 @@ class MainWindow(QMainWindow):
         top_frame = QFrame(); top_frame.setStyleSheet("border: 1px solid black")
         top_layout = QHBoxLayout(top_frame); top_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter); top_layout.setContentsMargins(0 ,0 ,0 ,0); top_layout.setSpacing(0)
 
-        # Define graph type toggle button
-        graph_type_btn = QPushButton(); graph_type_btn.setCheckable(True); graph_type_btn.setFixedWidth(100)
-        graph_type_btn.name = "graph_type_btn"; graph_type_btn.group = "top_btns"
-        graph_type_btn.setStyleSheet(f"""
-        QPushButton {{background-image: url('img_src/candlestick_icon_scaled.png'); background-repeat: no-repeat; background-position: center; background-color: {self.colours['Default']}}}
-        QPushButton:hover {{background-color: {self.colours['Hover']}}}
-        QPushButton:checked {{background-image: url('img_src/line_graph_icon_scaled.png'); background-repeat: no-repeat; background-position: center; background-color: {self.colours['Default']}}}
-        QPushButton:checked:hover {{background-color: {self.colours['Hover']}}}        """)
-        graph_type_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        graph_type_btn.clicked.connect(lambda checked: self.testfunc(graph_type_btn))
-
         # Define graph stock edit buttons
-        add_stock_btn = self.make_indv_btn("add_stock_btn", "top_btns", 'img_src/add_stock_icon_scaled.png', width=100)
-        remove_stock_btn = self.make_indv_btn("remove_stock_btn", "top_btns", 'img_src/remove_stock_icon_scaled.png', width=100)
-        clear_graph_btn = self.make_indv_btn("clear_graph_btn", "top_btns", 'img_src/clear_graph_icon_scaled.png', width=100)
-        save_graph_btn = self.make_indv_btn("save_graph_btn", "top_btns", "img_src/save_graph_icon.png", width=100)
+        graph_btns = [("graph_type_btn", "img_src/candlestick_icon_scaled.png", "img_src/line_graph_icon_scaled.png"), ("add_stock_btn", "img_src/add_stock_icon_scaled.png", None),
+                      ("remove_stock_btn", "img_src/remove_stock_icon_scaled.png", None), ("clear_graph_btn", "img_src/clear_graph_icon_scaled.png", None)   ]
+        for name, img, img_2 in graph_btns: top_layout.addWidget(CustomButton(name, "top_btns", "indv", parent=self, img=img, secondary_img=img_2, width=100))
 
-        top_layout.addWidget(graph_type_btn); top_layout.addWidget(add_stock_btn); top_layout.addWidget(remove_stock_btn); top_layout.addWidget(clear_graph_btn)
-        top_layout.addStretch(); top_layout.addWidget(save_graph_btn)
+        top_layout.addStretch(); top_layout.addWidget(CustomButton("save_graph_btn", "top_btns", "indv", parent=self, img="img_src/save_graph_icon.png", width=100))
 
         # Define graph frame (TBD: to be developed further)
         graph_frame = self.coloured_frame("transparent")
@@ -100,10 +87,9 @@ class MainWindow(QMainWindow):
         self.circle_label = ClickableLabel()
         pixmap = QPixmap("img_src/person_icon.jpg")
         self.circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); self.circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
         self.circle_label.clicked.connect(self.profile_click)
-        profile_frame_layout.addWidget(self.circle_label, alignment=Qt.AlignmentFlag.AlignCenter); profile_frame_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
+        for widget in [self.circle_label, self.status_label]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ## Define prediction settings frame (pd_set = prediction_settings) and widgets within
         self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
@@ -116,11 +102,8 @@ class MainWindow(QMainWindow):
         # Type of prediction selection widgets
         prediction_type_layout = QHBoxLayout(); prediction_type_layout.setSpacing(10)
 
-        lin_reg_btn = self.make_text_grp_btn("linear_regression_btn", "prediction_type_btns", "Linear Reg", width=75, height=30)  # lin_reg = linear regression
-        random_forrest_btn = self.make_text_grp_btn("random_forrest_btn", "prediction_type_btns", "Random Forrest", width=75, height=30)
-        ri_btn = self.make_text_grp_btn("ri_btn", "prediction_type_btns", "Reinforcement Learning", width=75, height=30)  # ri = reinforcement learning
-
-        prediction_type_layout.addWidget(lin_reg_btn); prediction_type_layout.addWidget(random_forrest_btn); prediction_type_layout.addWidget(ri_btn)
+        pd_btns = [("linear_regression_btn", "Linear Reg"), ("random_forrest_btn", "Random Forrest"), ("ri_btn", "Reinforcement Learning")]
+        for name, text in pd_btns: prediction_type_layout.addWidget(CustomButton(name, "prediction_type_btns", "text_grp", parent=self, text=text, width=75, height=30))
 
         # Risk slider widget
         risk_layout = QVBoxLayout(); risk_layout.setContentsMargins(0 ,0 ,0 ,0); risk_layout.setSpacing(0)
@@ -139,22 +122,18 @@ class MainWindow(QMainWindow):
         # Time period selection widgets
         time_period_layout = QHBoxLayout(); time_period_layout.setSpacing(10)
 
-        day_btn = self.make_text_grp_btn("day_btn", "time_period_btns", "Day", width=75, height=30)
-        month_btn = self.make_text_grp_btn("month_btn", "time_period_btns", "Month", width=75, height=30)
-        year_btn = self.make_text_grp_btn("year_btn", "time_period_btns", "Year", width=75, height=30)
-
-        time_period_layout.addWidget(day_btn); time_period_layout.addWidget(month_btn); time_period_layout.addWidget(year_btn)
+        time_btns = [("day_btn", "Day"), ("month_btn", "Month"), ("year_btn", "Year")]
+        for name, text in time_btns: time_period_layout.addWidget(CustomButton(name, "time_period_btns", "text_grp", parent=self, text=text, width=75, height=30))
 
         # Confirmation and redo widgets
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50); confirmations_layout.setContentsMargins(20 ,20 ,20 ,20)
-        reroll_btn = self.make_indv_btn("reroll_btn", "confirmation_btns", "img_src/reroll_icon_scaled.png", width=70, height=70)
-        confirm_pd_btn = self.make_indv_btn("confirm_pd_btn", "confirmation_btns", "img_src/confirm_icon_scaled.png", width=70, height=70)
-
-        confirmations_layout.addWidget(reroll_btn); confirmations_layout.addWidget(confirm_pd_btn)
+        conf_btns = [("reroll_btn", "img_src/reroll_icon_scaled.png"), ("confirm_pd_btn", "img_src/confirm_icon_scaled.png")]
+        for name, img in conf_btns: confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv", parent=self, img=img, width=70, height=70))
 
         # Add all prediction setting widgets to prediction settings layout
-        pd_set_layout.addWidget(self.ticker_symbol_inbox); pd_set_layout.addLayout(prediction_type_layout); pd_set_layout.addLayout(risk_layout)
-        pd_set_layout.addLayout(time_period_layout); pd_set_layout.addLayout(confirmations_layout); pd_set_layout.addStretch()
+        pd_set_layout.addWidget(self.ticker_symbol_inbox)
+        for layout in [prediction_type_layout, risk_layout, time_period_layout, confirmations_layout]: pd_set_layout.addLayout(layout)
+        pd_set_layout.addStretch()
 
         # Define prediction result widget (TBD: to be developed further)
         prediction_result_frame = QFrame(); prediction_result_frame.setStyleSheet("border: 1px solid black")
@@ -167,14 +146,6 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(profile_frame, 1); right_layout.addWidget(self.pd_set_frame, 10); right_layout.addWidget(prediction_result_frame, 10)
         return right_frame
 
-    def testfunc(self, btn: QPushButton) -> None:
-        # Temporary function to test button click activation
-        print("testfunc", btn.name)
-        if btn.name == "save_graph_btn":
-            self.show_graph_save_popup(btn)
-        elif btn.name == "confirm_pd_btn":
-            self.start_prediction_simulation()
-
     def profile_click(self):
         if self.logged_in:
             self.hide()
@@ -184,10 +155,12 @@ class MainWindow(QMainWindow):
 
     def login_window(self):
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
-        if not ok or not username: return
+        if not ok: return
 
         password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:", QLineEdit.EchoMode.Password)
         if not ok: return
+
+        # if not all(6 <= len(w) <= 64 for w in [username, password]): QMessageBox.critical(self, "Error", "Username or password is too short."); return
 
         result = self.data_manager.get_profile(username, password)
         if isinstance(result, Profile):
@@ -198,7 +171,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Success", f"Welcome, {username}!")
 
         elif result == "Non-existent profile":
-            reply = QMessageBox.question(self, "Profile Not Found", "Profile does not exist. Would you like to create a new one?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            reply = QMessageBox.question(self, "Profile Not Found", "Profile does not exist. Would you like to create a new one?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
             if reply == QMessageBox.StandardButton.Yes:
                 creation_response = self.data_manager.create_profile(username, password)
@@ -219,12 +193,10 @@ class MainWindow(QMainWindow):
 
     def start_prediction_simulation(self) -> None:
         print("Prediction starting...") # DEBUG
-        # Find ticker and risk level inputs
+        # Find ticker and risk level inputs, prediction type button, and time period button
         ticker = self.ticker_symbol_inbox.text(); risk_level = self.risk_slider.value()
-        # Find selected Prediction Type button
-        selected_prediction_type = next((btn.text for btn in self.btns["prediction_type_btns"] if btn.isChecked()), None)
-        # Find selected Time Period button
-        selected_time_period = next((btn.text for btn in self.btns["time_period_btns"] if btn.isChecked()), None)
+        selected_prediction_type = next((btn.text() for btn in self.btns["prediction_type_btns"] if btn.isChecked()), None)
+        selected_time_period = next((btn.text() for btn in self.btns["time_period_btns"] if btn.isChecked()), None)
 
         # Validation to make sure all input fields are filled
         if not all([ticker, selected_prediction_type, selected_time_period]):
@@ -232,7 +204,7 @@ class MainWindow(QMainWindow):
             return
 
         self.pd_set_frame.setEnabled(False)
-        self.prediction_result_label.setText("Processing... (10s)")
+        self.prediction_result_label.setText("Processing... (3s)")
 
         def finish_prediction_simulation():
             print("Prediction finished.")  # DEBUG
@@ -249,7 +221,7 @@ Time Period: {selected_time_period}
             # Popup message box to show success
             QMessageBox.information(self, "Prediction Status", "Successful")
 
-        QTimer.singleShot(10000, finish_prediction_simulation)
+        QTimer.singleShot(3000, finish_prediction_simulation)
 
     def save_graph(self, input_box) -> None:
         # Function to save the state of the graph when button pressed (TBD: to be developed further)
@@ -280,91 +252,6 @@ Time Period: {selected_time_period}
 
         layout.addWidget(label); layout.addWidget(input_box); layout.addStretch()
         popup.setLayout(layout); popup.exec()
-
-    def make_indv_btn(self, name, group, img, width = None, height = None) -> QPushButton:
-        # Creates an independent button calls a function every time it is clicked
-        # Setup button properties
-        btn = QPushButton()
-        btn.img = img; btn.name = name; btn.group = group
-
-        if height and width: btn.setFixedSize(width, height)
-        elif height and not width: btn.setFixedHeight(height)
-        elif width and not height: btn.setFixedWidth(width)
-
-        btn.setStyleSheet(f"""
-        QPushButton {{background-image: url('{btn.img}'); background-repeat: no-repeat; background-position: center; background-color: #e3e3e3}}
-        QPushButton:hover {{background-color: #adadad}}
-        QPushButton:pressed {{background-color: #858585}}        """)
-        btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-
-        # Call testfunc on click
-        btn.clicked.connect(lambda checked, b=btn: self.testfunc(b))
-        self.btns[group].append(btn); return btn
-
-    def make_text_grp_btn(self, name, group, text, width = None, height = None) -> QPushButton:
-        # Create a button part of group with text label as its filler
-        # Setup button properties
-        btn = QPushButton(); btn.setCheckable(True)
-        btn.name = name; btn.group = group; btn.text = text
-
-        if height and width: btn.setFixedSize(width, height)
-        elif height and not width: btn.setFixedHeight(height)
-        elif width and not height: btn.setFixedWidth(width)
-
-        btn.setStyleSheet("""
-        QPushButton {background-color: #e3e3e3; font-size: 13px; font-family: Aller display}
-        QPushButton:hover {background-color: #adadad}""")
-        btn.setText(btn.text)
-
-        # Define how other buttons in group respond when one is clicked
-        def handle_text_grp_btn_click(clicked_btn):
-            for grp_btn in self.btns[clicked_btn.group]:
-                if grp_btn == clicked_btn:
-                    # Set state to clicked style
-                    grp_btn.setStyleSheet \
-                        ("QPushButton {background-color: #8a8a8a; font-size: 13px; font-family: Aller display}")
-                    self.testfunc(grp_btn)
-                else:
-                    # Set state to unclicked style
-                    grp_btn.setChecked(False)
-                    grp_btn.setStyleSheet("""QPushButton {background-color: #e3e3e3; font-size: 13px; font-family: Aller display}
-                                          QPushButton:hover {background-color: #adadad} """)
-
-        # Call click handler on click
-        btn.clicked.connect(lambda checked: handle_text_grp_btn_click(btn))
-        self.btns[group].append(btn); return btn
-
-    def make_img_grp_btn(self, name, group, img, width = None, height = None) -> QPushButton:
-        # Create a button part of group with image as its filler
-        # Setup button properties
-        btn = QPushButton(); btn.setCheckable(True)
-        btn.name = name; btn.group = group; btn.img = img
-
-        if height and width: btn.setFixedSize(width, height)
-        elif height and not width: btn.setFixedHeight(height)
-        elif width and not height: btn.setFixedWidth(width)
-
-        btn.setStyleSheet(f"""
-        QPushButton {{background-image: url('{btn.img}'); background-repeat: no-repeat; background-position: center; background-color: #e3e3e3}}
-        QPushButton:hover {{background-color: #adadad}}""")
-
-        # Define how other buttons in group respond when one is clicked
-        def handle_img_grp_btn_click(clicked_btn):
-            for grp_btn in self.btns[clicked_btn.group]:
-                if grp_btn == clicked_btn:
-                    # Set state to clicked style
-                    grp_btn.setStyleSheet \
-                        (f"""QPushButton {{background-image: url('{grp_btn.img}'); background-repeat: no-repeat; background-position: center; background-color: #8a8a8a}}""")
-                    self.testfunc(grp_btn)
-                else:
-                    # Set state to unclicked style
-                    grp_btn.setChecked(False)
-                    grp_btn.setStyleSheet(f"""QPushButton {{background-image: url('{grp_btn.img}'); background-repeat: no-repeat; background-position: center; background-color: #e3e3e3}}
-                                          QPushButton:hover {{background-color: #adadad}} """)
-
-        # Call click handler on click
-        btn.clicked.connect(lambda checked: handle_img_grp_btn_click(btn))
-        self.btns[group].append(btn); return btn
 
     def coloured_frame(self, colour, min_height=None) -> QFrame:    # TEMP FUNCTION
         # Create a frame with a coloured border

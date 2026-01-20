@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout
 
 from profile import Profile
 from load_data import peek_data, validate_ticker
+from custom_button import CustomButton
 
 
 class ProfileWindow(QDialog):
@@ -22,6 +23,7 @@ class ProfileWindow(QDialog):
         self.profile = profile_obj
         self.setWindowTitle(f"Profile Management - {self.profile.get_data().get('username')}")
         self.setGeometry(100, 100, 1500, 900)
+        self.btns = {"profile_btns": [], "Na": []}
 
         # Switch back to main window when closed
         self.save_on_close = True
@@ -43,9 +45,8 @@ class ProfileWindow(QDialog):
 
         self.circle_label = QLabel(); pixmap = QPixmap("img_src/person_icon.jpg")
         self.circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); self.circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        name_label = QLabel(self.profile.get_username())
 
-        profile_frame_layout.addWidget(self.circle_label, alignment=Qt.AlignmentFlag.AlignCenter); profile_frame_layout.addWidget(name_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        for widget in [self.circle_label, QLabel(self.profile.get_username())]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ## Define profile and preferences settings
         setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black"); setting_frame.setFixedHeight(200)
@@ -55,14 +56,10 @@ class ProfileWindow(QDialog):
         edit_frame = QFrame(); edit_frame.setStyleSheet("border: 1px solid black")
         edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(0,0,0,0); edit_layout.setSpacing(0)
 
-        logout_btn = self.make_indv_btn("logout_btn", "img_src/logout.png")
-        change_profile_btn = self.make_indv_btn("change_profile_btn", "img_src/change_profile_icon.png")
-        export_data_btn = self.make_indv_btn("export_data_btn", "img_src/export_data.png")
-        import_data_btn = self.make_indv_btn("import_data_btn", "img_src/import_data.png")
-        delete_profile_btn = self.make_indv_btn("delete_profile_btn", "img_src/delete.png")
-
-        edit_layout.addWidget(logout_btn); edit_layout.addWidget(change_profile_btn); edit_layout.addWidget(export_data_btn)
-        edit_layout.addWidget(import_data_btn); edit_layout.addWidget(delete_profile_btn)
+        edit_btns = [("logout_btn", "img_src/logout.png"), ("change_profile_btn", "img_src/change_profile_icon.png"),
+                     ("export_data_btn", "img_src/export_data.png"), ("import_data_btn", "img_src/import_data.png"),
+                     ("delete_profile_btn", "img_src/delete.png")]
+        for name, img in edit_btns: edit_layout.addWidget(CustomButton(name, "profile_btns", "indv", parent=self, img=img))
 
         # Risk slider widget
         risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
@@ -71,7 +68,7 @@ class ProfileWindow(QDialog):
         self.risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow); self.risk_slider.setMinimum(1); self.risk_slider.setMaximum(10)
         self.risk_slider.setTickInterval(1); self.risk_slider.setSingleStep(1); self.risk_slider.setValue(self.profile.get_data()["Risk tolerance"])
         self.risk_slider.valueChanged.connect(lambda v:
-            risk_value_label.setText(f"Risk tolerance: {v}{' (Current)' if v == self.profile.get_data()['Risk tolerance'] else (' (Recommended)' if v == 5 else '')}"))
+            risk_value_label.setText(f"Risk tolerance: {v}{' (Current)' if v == self.profile.get_data()['Risk tolerance'] else (' (Recommended)' if v == 4 else '')}"))
 
         # Risk slider labels
         risk_value_label = QLabel(f"Risk tolerance: {self.profile.get_data()['Risk tolerance']}"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -83,8 +80,8 @@ class ProfileWindow(QDialog):
 
         setting_layout.addWidget(edit_frame); setting_layout.addLayout(risk_layout)
 
-        # Add profile settings and preferences to left frame
-        top_layout.addWidget(profile_frame); top_layout.addStretch(); top_layout.addWidget(setting_frame); top_layout.addStretch()
+        # Add profile settings and preferences to top frame
+        for widget in [profile_frame, setting_frame]: top_layout.addWidget(widget); top_layout.addStretch()
         return top_frame
 
     def build_bottom_frame(self) -> QFrame:
@@ -130,11 +127,10 @@ class ProfileWindow(QDialog):
         self.search_input = QLineEdit(); self.search_input.setPlaceholderText("Search for a stock...")
         self.search_input.setFixedHeight(40); self.search_input.setStyleSheet("border: 1px solid black; padding-left: 10px;")
 
-        confirm_btn = self.make_indv_btn("search_confirm_btn", "img_src/confirm_icon_scaled.png", width=60, height=40)
-        confirm_btn.setProperty("border", "true"); confirm_btn.style().unpolish(confirm_btn); confirm_btn.style().polish(confirm_btn)
+        confirm_btn = CustomButton("search_confirm_btn", "Na", "indv", parent=self, img="img_src/confirm_icon_scaled.png", width=60, height=40)
+        confirm_btn.setProperty("BorderBlank", "true"); confirm_btn.style().unpolish(confirm_btn); confirm_btn.style().polish(confirm_btn)
         
         search_layout.addWidget(self.search_input); search_layout.addWidget(confirm_btn)
-
 
 
         scroll_container = QFrame(); scroll_container.setStyleSheet("border: 1px solid black")
@@ -143,13 +139,11 @@ class ProfileWindow(QDialog):
         detailed_stocks_widget = QScrollArea(); detailed_stocks_widget.setWidgetResizable(True); detailed_stocks_widget.setStyleSheet("border: None")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        for index, ticker in enumerate(self.profile.get_data()["Saved stocks"]):
-            scroll_layout.addWidget(self.create_stock_card(ticker))
+        for index, ticker in enumerate(self.profile.get_data()["Saved stocks"]): scroll_layout.addWidget(self.create_stock_card(ticker))
 
         detailed_stocks_widget.setWidget(scroll_widget); scroll_container_layout.addWidget(detailed_stocks_widget)
 
         right_layout.addLayout(search_layout); right_layout.addWidget(scroll_container)
-
         bottom_layout.addWidget(left_frame); bottom_layout.addWidget(right_frame)
         return bottom_frame
 
@@ -238,7 +232,9 @@ class ProfileWindow(QDialog):
         self.refresh_window()
 
     # Adds a stock to profile data and refreshes UI
-    def add_stock(self, ticker: str):
+    def add_stock(self):
+        if not self.search_input.text(): return
+        ticker = self.search_input.text().upper()
         if not validate_ticker(ticker): QMessageBox.critical(self, "Failed", "Invalid ticker."); return
         current_data = self.profile.get_data()
         current_data["Saved stocks"].insert(0, ticker)
@@ -253,22 +249,6 @@ class ProfileWindow(QDialog):
         # Recreate window and add widgets back in
         self.top_frame = self.build_top_frame(); self.bottom_frame = self.build_bottom_frame()
         self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
-
-    # Management function to call correct function on a click
-    def btn_click_matcher(self, btn: QPushButton) -> None:
-        print(f"'{btn.name}' button was clicked.")
-        if btn.name == "logout_btn":
-            self.logout()
-        elif btn.name == "change_profile_btn":
-            self.change_profile()
-        elif btn.name == "export_data_btn":
-            self.export_profile()
-        elif btn.name == "import_data_btn":
-            self.import_profile()
-        elif btn.name == "delete_profile_btn":
-            self.delete_profile()
-        elif btn.name == "search_confirm_btn":
-            self.add_stock(self.search_input.text().upper())
 
     def logout(self):
         self.parent_window.current_profile = None; self.parent_window.logged_in = False
@@ -291,9 +271,7 @@ class ProfileWindow(QDialog):
 
         elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist. Go back to main menu to create new.")
         elif result == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
-        else:
-            # Catch all other DataManager string error results
-            QMessageBox.critical(self, "Error", f"An error occurred: {result}")
+        else: QMessageBox.critical(self, "Error", f"An error occurred: {result}") # Catch all other DataManager string error results
 
     def delete_profile(self):
         password, ok = QInputDialog.getText(self, "Security check", f"Enter Password for {self.profile.get_username()}:", QLineEdit.EchoMode.Password)
@@ -345,27 +323,6 @@ class ProfileWindow(QDialog):
 
             except json.JSONDecodeError: QMessageBox.critical(self, "Import Error", "The file is not a valid JSON file.")
             except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
-
-    # Creates an independent button calls a function every time it is clicked
-    def make_indv_btn(self, name, img, width = None, height = None) -> QPushButton:
-        # Setup button properties
-        btn = QPushButton()
-        btn.img = img; btn.name = name
-
-        if height and width: btn.setFixedSize(width, height)
-        elif height and not width: btn.setFixedHeight(height)
-        elif width and not height: btn.setFixedWidth(width)
-
-        btn.setStyleSheet(f"""
-        QPushButton {{background-image: url('{btn.img}'); background-repeat: no-repeat; background-position: center; background-color: #e3e3e3}}
-        QPushButton:hover {{background-color: #adadad}}
-        QPushButton:pressed {{background-color: #858585}}
-        QPushButton[border="true"] {{border: 2px solid black}}""")
-        btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-
-        # Call btn_click_matcher on click
-        btn.clicked.connect(lambda checked, b=btn: self.btn_click_matcher(b))
-        return btn
 
     # Create a circular pixmap to use as a filler area
     @staticmethod

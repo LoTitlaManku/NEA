@@ -1,22 +1,14 @@
 
 import sys
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPalette, QPainter, QPixmap, QPainterPath, QMouseEvent
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QMessageBox, QInputDialog,
-                             QWidget, QLabel, QFrame, QPushButton, QDialog, QLineEdit, QSlider)
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
+                             QWidget, QLabel, QFrame, QDialog, QLineEdit)
 
 from profile import DataManager, Profile
 from profile_gui import ProfileWindow
-from custom_button import CustomButton
+from custom_widgets import CustomButton, create_slider_layout, create_circle_label
 
 ############################################################################
-
-class ClickableLabel(QLabel):
-    clicked = pyqtSignal()
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit()
-        super().mouseReleaseEvent(event)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -30,21 +22,20 @@ class MainWindow(QMainWindow):
         # Initialize the profile logic
         self.data_manager = DataManager()
         self.logged_in = False
-        self.current_profile: Profile | None = None
+        self.logged_profile: Profile | None = None
         self.status_label = QLabel("Not logged in")
 
         # Set up the main layout with left, center, and right frames
-        central = QWidget(); self.setCentralWidget(central)
-        main_layout = QHBoxLayout(); central.setLayout(main_layout)
-        left_frame = self.build_left_frame(); center_frame = self.build_center_frame(); right_frame = self.build_right_frame()
-        main_layout.addWidget(left_frame, 1); main_layout.addWidget(center_frame, 15); main_layout.addWidget(right_frame, 3)
+        central = QWidget(); self.setCentralWidget(central); self.main_layout = QHBoxLayout(); central.setLayout(self.main_layout)
+        self.main_frames = {"left": [self.build_left_frame(), 1], "center": [self.build_center_frame(), 15], "right": [self.build_right_frame(), 3]}
+        for frame_info in self.main_frames.values(): self.main_layout.addWidget(frame_info[0], frame_info[1])
 
     def build_left_frame(self) -> QFrame:
         # Initialize the left sidebar with tool buttons
         left_frame = QFrame(); left_frame.setStyleSheet("border: 1px solid black;")
         left_layout = QVBoxLayout(left_frame); left_layout.setContentsMargins(0 ,0 ,0 ,0); left_layout.setSpacing(0)
 
-        # Define tool buttons
+        # Create tool buttons with the custom class and add to left frame
         tool_btns = [("mouse_tool", "img_src/mouse_icon_scaled.png"), ("line_tool", "img_src/line_icon_scaled.png"), ("notes_tool", "img_src/notes_icon_scaled.png")]
         for name, img in tool_btns: left_layout.addWidget(CustomButton(name, "left_btns", "img_grp", parent=self, img=img, height=100))
         left_layout.addStretch()
@@ -53,7 +44,7 @@ class MainWindow(QMainWindow):
 
     def build_center_frame(self) -> QFrame:
         # Initialize the center frame with top bar and graph area
-        center_frame = QFrame(); center_layout = QVBoxLayout(center_frame)
+        center_frame = QFrame(); center_layout = QVBoxLayout(center_frame); center_layout.setContentsMargins(0 ,0 ,0 ,0)
 
         # Defiine top frame
         top_frame = QFrame(); top_frame.setStyleSheet("border: 1px solid black")
@@ -67,10 +58,11 @@ class MainWindow(QMainWindow):
         top_layout.addStretch(); top_layout.addWidget(CustomButton("save_graph_btn", "top_btns", "indv", parent=self, img="img_src/save_graph_icon.png", width=100))
 
         # Define graph frame (TBD: to be developed further)
-        graph_frame = self.coloured_frame("transparent")
-        graph_label = QLabel("Graph Area")
-        graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        graph_frame.layout().addWidget(graph_label)
+        graph_frame = QFrame(); layout = QVBoxLayout(graph_frame); layout.setContentsMargins(5, 5, 5, 5)
+        graph_frame.setStyleSheet("border: 1px solid black")
+        graph_label = QLabel("Graph Area"); graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        graph_label.setStyleSheet("border: none")
+        layout.addWidget(graph_label)
 
         # Add top frame and graph frame to center layout
         center_layout.addWidget(top_frame, 1); center_layout.addWidget(graph_frame, 10)
@@ -78,18 +70,13 @@ class MainWindow(QMainWindow):
 
     def build_right_frame(self) -> QFrame:
         # Initialize the right sidebar with profile, prediction settings, and results
-        right_frame = QFrame(); right_layout = QVBoxLayout(right_frame)
+        right_frame = QFrame(); right_layout = QVBoxLayout(right_frame); right_layout.setContentsMargins(0 ,0 ,0 ,0)
 
         ## Define profile frame with circle widget and label
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
         profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.circle_label = ClickableLabel()
-        pixmap = QPixmap("img_src/person_icon.jpg")
-        self.circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); self.circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.circle_label.clicked.connect(self.profile_click)
-
-        for widget in [self.circle_label, self.status_label]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        for widget in [create_circle_label(self, clickable=True, diameter=120), self.status_label]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ## Define prediction settings frame (pd_set = prediction_settings) and widgets within
         self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
@@ -105,20 +92,6 @@ class MainWindow(QMainWindow):
         pd_btns = [("linear_regression_btn", "Linear Reg"), ("random_forrest_btn", "Random Forrest"), ("ri_btn", "Reinforcement Learning")]
         for name, text in pd_btns: prediction_type_layout.addWidget(CustomButton(name, "prediction_type_btns", "text_grp", parent=self, text=text, width=75, height=30))
 
-        # Risk slider widget
-        risk_layout = QVBoxLayout(); risk_layout.setContentsMargins(0 ,0 ,0 ,0); risk_layout.setSpacing(0)
-
-        self.risk_slider = QSlider(Qt.Orientation.Horizontal); self.risk_slider.setStyleSheet("""QSlider {border: none}"""); self.risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.risk_slider.setMinimum(1); self.risk_slider.setMaximum(10); self.risk_slider.setTickInterval(1); self.risk_slider.setSingleStep(1)
-        self.risk_slider.valueChanged.connect(lambda v: risk_value_label.setText(f"Risk tolerance: {v}{' (Recommended) 'if v == 4 else ''}"))
-
-        # Risk slider labels
-        risk_value_label = QLabel("Risk tolerance: 1"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter); risk_value_label.setStyleSheet("border: none; font-size: 13px; font-family: Aller Display")
-        number_layout = QHBoxLayout()
-        for i in range(1, 11): nlabel = QLabel(str(i)); nlabel.setAlignment(Qt.AlignmentFlag.AlignCenter); nlabel.setStyleSheet("border: none"); number_layout.addWidget(nlabel)
-
-        risk_layout.addWidget(risk_value_label); risk_layout.addWidget(self.risk_slider); risk_layout.addLayout(number_layout)
-
         # Time period selection widgets
         time_period_layout = QHBoxLayout(); time_period_layout.setSpacing(10)
 
@@ -132,7 +105,7 @@ class MainWindow(QMainWindow):
 
         # Add all prediction setting widgets to prediction settings layout
         pd_set_layout.addWidget(self.ticker_symbol_inbox)
-        for layout in [prediction_type_layout, risk_layout, time_period_layout, confirmations_layout]: pd_set_layout.addLayout(layout)
+        for layout in [prediction_type_layout, create_slider_layout(self), time_period_layout, confirmations_layout]: pd_set_layout.addLayout(layout)
         pd_set_layout.addStretch()
 
         # Define prediction result widget (TBD: to be developed further)
@@ -146,10 +119,24 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(profile_frame, 1); right_layout.addWidget(self.pd_set_frame, 10); right_layout.addWidget(prediction_result_frame, 10)
         return right_frame
 
-    def profile_click(self):
+    def rebuild_frame(self, frame_pos: str) -> None:
+        old = self.main_frames.get(frame_pos)[0]
+        stretch = self.main_frames.get(frame_pos)[1]
+        self.main_layout.removeWidget(old); old.setParent(None)
+        old.deleteLater()
+
+        new = getattr(self, f"build_{frame_pos}_frame")()
+        self.main_frames.update({frame_pos: [new, stretch]})
+        self.main_layout.addWidget(new, stretch)
+
+    def get_profile_data(self):
+        if self.logged_profile is None: return {}
+        else: return self.logged_profile.get_data()
+
+    def label_click(self):
         if self.logged_in:
             self.hide()
-            self.profile_window = ProfileWindow(self, self.current_profile)
+            self.profile_window = ProfileWindow(self, self.logged_profile)
             self.profile_window.exec()
         else: self.login_window()
 
@@ -164,10 +151,10 @@ class MainWindow(QMainWindow):
 
         result = self.data_manager.get_profile(username, password)
         if isinstance(result, Profile):
-            self.logged_in = True; self.current_profile = result
+            self.logged_in = True; self.logged_profile = result
 
             self.status_label.setText(f"Status: Logged In as {username}")
-            self.circle_label.setStyleSheet("border: 4px solid green; border-radius: 60px;") # temp
+            self.rebuild_frame("right")
             QMessageBox.information(self, "Success", f"Welcome, {username}!")
 
         elif result == "Non-existent profile":
@@ -223,19 +210,8 @@ Time Period: {selected_time_period}
 
         QTimer.singleShot(3000, finish_prediction_simulation)
 
-    def save_graph(self, input_box) -> None:
-        # Function to save the state of the graph when button pressed (TBD: to be developed further)
-        print(f"Saved. {input_box.text()}")
-        msg = QWidget(self); msg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.BypassWindowManagerHint); msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-
-        layout = QVBoxLayout(msg)
-        label = QLabel("Saved."); label.setStyleSheet("background-color: black; color: white; padding: 5px; border-radius: 5px;"); layout.addWidget(label)
-
-        msg.adjustSize(); pos = self.rect().center() - msg.rect().center(); msg.move(pos); msg.show()
-        QTimer.singleShot(2000, msg.close)
-
+    # Function to show popup for saving graph (TBD: to be developed further)
     def show_graph_save_popup(self, btn) -> None:
-        # Function to show popup for saving graph (TBD: to be developed further)
         # Creates popup dialog and positions it below the button
         popup = QDialog(self); popup.setWindowTitle(btn.name); popup.setModal(True); popup.setFixedSize(200, 100)
         btn_pos = btn.mapToGlobal(btn.rect().bottomLeft())
@@ -253,26 +229,17 @@ Time Period: {selected_time_period}
         layout.addWidget(label); layout.addWidget(input_box); layout.addStretch()
         popup.setLayout(layout); popup.exec()
 
-    def coloured_frame(self, colour, min_height=None) -> QFrame:    # TEMP FUNCTION
-        # Create a frame with a coloured border
-        frame = QFrame(); frame.setFrameShape(QFrame.Shape.StyledPanel); frame.setAutoFillBackground(True)
-        palette = frame.palette(); palette.setColor(QPalette.ColorRole.Window, QColor(colour))
-        frame.setPalette(palette)
-        if min_height: frame.setMinimumHeight(min_height)
-        layout = QVBoxLayout(frame); layout.setContentsMargins(5, 5, 5, 5)
-        return frame
+    # Helper function to save the state of the graph when button pressed (TBD: to be developed further)
+    def save_graph(self, input_box) -> None:
+        print(f"Saved. {input_box.text()}")
+        msg = QWidget(self); msg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.BypassWindowManagerHint); msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
-    def circle_bitmap(self, pixmap, diameter) -> QPixmap:
-        # Create a circular pixmap to use as a filler area
-        pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-        mask = QPixmap(diameter, diameter); mask.fill(Qt.GlobalColor.transparent)
+        layout = QVBoxLayout(msg)
+        label = QLabel("Saved."); label.setStyleSheet("background-color: black; color: white; padding: 5px; border-radius: 5px;"); layout.addWidget(label)
 
-        painter = QPainter(mask)
-        path = QPainterPath(); path.addEllipse(0, 0, diameter, diameter)
-        painter.setClipPath(path)
+        msg.adjustSize(); pos = self.rect().center() - msg.rect().center(); msg.move(pos); msg.show()
+        QTimer.singleShot(2000, msg.close)
 
-        painter.drawPixmap(0, 0, pixmap); painter.end()
-        return mask
 
     def closeEvent(self, event) -> None: event.accept()
 

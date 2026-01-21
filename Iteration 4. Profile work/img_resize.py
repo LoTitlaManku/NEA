@@ -1,7 +1,7 @@
 
 import sys
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QMainWindow, QApplication
 
 
 class MainWindow(QMainWindow):

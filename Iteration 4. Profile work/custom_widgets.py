@@ -1,8 +1,14 @@
 
 from __future__ import annotations
-from PyQt6.QtWidgets import QPushButton, QSizePolicy
-from typing import TYPE_CHECKING, Callable, Optional
 
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QMouseEvent
+from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QSizePolicy,
+                             QLabel, QPushButton, QSlider)
+from typing import TYPE_CHECKING, Callable, Optional
+import os
+
+# For type hinting
 if TYPE_CHECKING:
     from main_gui import MainWindow
     from profile_gui import ProfileWindow
@@ -81,24 +87,55 @@ class CustomButton(QPushButton):
 """)
 
 
+def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
+    risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
+
+    current_tolerance = parent.get_profile_data().get("Risk tolerance", 4)
+    risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}"""); risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1); risk_slider.setSingleStep(1); risk_slider.setValue(current_tolerance)
+    risk_slider.valueChanged.connect(lambda v: risk_value_label.setText(f"Risk tolerance: {v} {'(Current)' if v == current_tolerance else ('(Recommended)' if v == 4 else '')}"))
+
+    # Risk slider labels
+    risk_value_label = QLabel(f"Risk tolerance: {current_tolerance} (Current)"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    risk_value_label.setStyleSheet("border: none; font-size: 13px; font-family: Aller Display")
+    number_layout = QHBoxLayout()
+    for i in range(1, 11): nlabel = QLabel(str(i)); nlabel.setAlignment(Qt.AlignmentFlag.AlignCenter); nlabel.setStyleSheet("border: none"); number_layout.addWidget(nlabel)
+
+    risk_layout.addWidget(risk_value_label); risk_layout.addWidget(risk_slider); risk_layout.addLayout(number_layout)
+    parent.risk_slider = risk_slider; return risk_layout
+
+class ClickableLabel(QLabel):
+    clicked = pyqtSignal()
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton: self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+def create_circle_label(parent: MainWindow | ProfileWindow, clickable: bool = False, diameter: int = 100) -> QLabel:
+    base = os.path.join("profile_images", parent.get_profile_data().get("username", "person_icon"))
+    pixmap = QPixmap(next((base + ext for ext in [".png", ".jpg", ".jpeg"] if os.path.exists(base + ext)), "profile_images/person_icon.jpg"))
+    if pixmap.isNull(): pixmap = QPixmap("profile_images/person_icon.jpg")
+
+    pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+    mask = QPixmap(diameter, diameter); mask.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(mask)
+    path = QPainterPath(); path.addEllipse(0, 0, diameter, diameter)
+    painter.setClipPath(path)
+
+    painter.drawPixmap(0, 0, pixmap); painter.end()
+
+    if clickable: label = ClickableLabel(); label.clicked.connect(parent.label_click)
+    else: label = QLabel()
+
+    label.setPixmap(mask)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    return label
+
 
 
 
 if __name__ in "__main__":
     print("Wrong")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

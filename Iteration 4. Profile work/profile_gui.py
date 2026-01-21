@@ -1,18 +1,20 @@
 
 import io
+import os
 import sys
+import shutil
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QCursor, QImage
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QSizePolicy, QMessageBox, QInputDialog, QFileDialog,
-                             QWidget, QLabel, QFrame, QPushButton, QDialog, QMenu, QLineEdit, QSlider, QScrollArea)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog, QFileDialog,
+                             QWidget, QLabel, QFrame,  QDialog, QMenu, QLineEdit, QScrollArea)
 
 from profile import Profile
 from load_data import peek_data, validate_ticker
-from custom_button import CustomButton
+from custom_widgets import CustomButton, create_slider_layout, create_circle_label
 
 
 class ProfileWindow(QDialog):
@@ -20,8 +22,8 @@ class ProfileWindow(QDialog):
         # Initialize the main window
         super().__init__(parent_window)
         self.parent_window = parent_window
-        self.profile = profile_obj
-        self.setWindowTitle(f"Profile Management - {self.profile.get_data().get('username')}")
+        self.logged_profile = profile_obj
+        self.setWindowTitle(f"Profile Management - {self.logged_profile.get_username()}")
         self.setGeometry(100, 100, 1500, 900)
         self.btns = {"profile_btns": [], "Na": []}
 
@@ -39,14 +41,10 @@ class ProfileWindow(QDialog):
         top_frame = QFrame(); top_layout = QHBoxLayout(top_frame); top_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
         top_layout.setContentsMargins(75, 5, 5, 20)
 
-        ## Define profile widget and name
+        ## Define profile widget, username and add to a container layout
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
         profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.circle_label = QLabel(); pixmap = QPixmap("img_src/person_icon.jpg")
-        self.circle_label.setPixmap(self.circle_bitmap(pixmap, 120)); self.circle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        for widget in [self.circle_label, QLabel(self.profile.get_username())]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        for widget in [create_circle_label(self, clickable=True, diameter=120), QLabel(self.logged_profile.get_username())]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ## Define profile and preferences settings
         setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black"); setting_frame.setFixedHeight(200)
@@ -61,23 +59,7 @@ class ProfileWindow(QDialog):
                      ("delete_profile_btn", "img_src/delete.png")]
         for name, img in edit_btns: edit_layout.addWidget(CustomButton(name, "profile_btns", "indv", parent=self, img=img))
 
-        # Risk slider widget
-        risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
-
-        self.risk_slider = QSlider(Qt.Orientation.Horizontal); self.risk_slider.setStyleSheet("""QSlider {border: none}""")
-        self.risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow); self.risk_slider.setMinimum(1); self.risk_slider.setMaximum(10)
-        self.risk_slider.setTickInterval(1); self.risk_slider.setSingleStep(1); self.risk_slider.setValue(self.profile.get_data()["Risk tolerance"])
-        self.risk_slider.valueChanged.connect(lambda v:
-            risk_value_label.setText(f"Risk tolerance: {v}{' (Current)' if v == self.profile.get_data()['Risk tolerance'] else (' (Recommended)' if v == 4 else '')}"))
-
-        # Risk slider labels
-        risk_value_label = QLabel(f"Risk tolerance: {self.profile.get_data()['Risk tolerance']}"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        risk_value_label.setStyleSheet("border: none; font-size: 13px; font-family: Aller Display")
-        number_layout = QHBoxLayout()
-        for i in range(1, 11): nlabel = QLabel(str(i)); nlabel.setAlignment(Qt.AlignmentFlag.AlignCenter); nlabel.setStyleSheet("border: none"); number_layout.addWidget(nlabel)
-
-        risk_layout.addWidget(risk_value_label); risk_layout.addWidget(self.risk_slider); risk_layout.addLayout(number_layout)
-
+        risk_layout = create_slider_layout(self)
         setting_layout.addWidget(edit_frame); setting_layout.addLayout(risk_layout)
 
         # Add profile settings and preferences to top frame
@@ -94,7 +76,7 @@ class ProfileWindow(QDialog):
         compound_stocks_widget = QScrollArea(); compound_stocks_widget.setWidgetResizable(True); compound_stocks_widget.setStyleSheet("border: none")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        for index, ticker in enumerate(self.profile.get_data()["Saved stocks"]):
+        for index, ticker in enumerate(self.get_profile_data()["Saved stocks"]):
             data = peek_data(ticker, 1)
             if data is None: continue
 
@@ -139,7 +121,7 @@ class ProfileWindow(QDialog):
         detailed_stocks_widget = QScrollArea(); detailed_stocks_widget.setWidgetResizable(True); detailed_stocks_widget.setStyleSheet("border: None")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        for index, ticker in enumerate(self.profile.get_data()["Saved stocks"]): scroll_layout.addWidget(self.create_stock_card(ticker))
+        for index, ticker in enumerate(self.get_profile_data()["Saved stocks"]): scroll_layout.addWidget(self.create_stock_card(ticker, index))
 
         detailed_stocks_widget.setWidget(scroll_widget); scroll_container_layout.addWidget(detailed_stocks_widget)
 
@@ -148,8 +130,7 @@ class ProfileWindow(QDialog):
         return bottom_frame
 
     # Creates a detailed stock row widget
-    @staticmethod
-    def create_stock_card(ticker: str) -> QFrame:
+    def create_stock_card(self, ticker: str, index: int) -> QFrame:
         df = peek_data(ticker, 30, "1d")
         if df is None: return
 
@@ -197,10 +178,18 @@ class ProfileWindow(QDialog):
         percent_label.setFixedWidth(120)
 
         layout.addWidget(ticker_label)
-        layout.addWidget(chart_area, 1)  # '1' makes the chart expand
+        layout.addWidget(chart_area, 1)
         layout.addWidget(percent_label)
 
+        card.setCursor(Qt.CursorShape.PointingHandCursor)
+        card.mousePressEvent = lambda event, t=ticker, i=index: self.show_stock_menu(t, i)
         return card
+
+    def get_profile_data(self):
+        if self.logged_profile is None: return {}
+        else: return self.logged_profile.get_data()
+
+    def label_click(self): self.choose_profile_icon()
 
     # Displays a floating menu to move or delete a stock
     def show_stock_menu(self, ticker: str, current_index: int) -> None:
@@ -209,7 +198,7 @@ class ProfileWindow(QDialog):
 
         # Disable Move Up if at top, Move Down if at bottom
         if current_index == 0: move_up.setEnabled(False)
-        if current_index == len(self.profile.get_data()["Saved stocks"]) - 1: move_down.setEnabled(False)
+        if current_index == len(self.get_profile_data()["Saved stocks"]) - 1: move_down.setEnabled(False)
 
         # Show menu at the current mouse position
         action = menu.exec(QCursor().pos())
@@ -219,16 +208,16 @@ class ProfileWindow(QDialog):
 
     # Swaps stock positions in the list and refreshes UI
     def reorder_stock(self, old_idx: int, new_idx: int) -> None:
-        stocks = self.profile.get_data()["Saved stocks"]
+        stocks = self.get_profile_data()["Saved stocks"]
         stocks[old_idx], stocks[new_idx] = stocks[new_idx], stocks[old_idx]
-        self.profile.update_data({"Saved stocks": stocks})
+        self.logged_profile.update_data({"Saved stocks": stocks})
         self.refresh_window()
 
     # Removes a stock from profile data and refreshes UI
     def remove_stock(self, ticker: str) -> None:
-        current_data = self.profile.get_data()
+        current_data = self.get_profile_data()
         current_data["Saved stocks"] = [s for s in current_data["Saved stocks"] if s != ticker]
-        self.profile.update_data(current_data)
+        self.logged_profile.update_data(current_data)
         self.refresh_window()
 
     # Adds a stock to profile data and refreshes UI
@@ -236,9 +225,9 @@ class ProfileWindow(QDialog):
         if not self.search_input.text(): return
         ticker = self.search_input.text().upper()
         if not validate_ticker(ticker): QMessageBox.critical(self, "Failed", "Invalid ticker."); return
-        current_data = self.profile.get_data()
+        current_data = self.get_profile_data()
         current_data["Saved stocks"].insert(0, ticker)
-        self.profile.update_data(current_data)
+        self.logged_profile.update_data(current_data)
         self.refresh_window()
 
     # Refreshes window to update information
@@ -251,8 +240,9 @@ class ProfileWindow(QDialog):
         self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
 
     def logout(self):
-        self.parent_window.current_profile = None; self.parent_window.logged_in = False
+        self.parent_window.logged_profile = None; self.parent_window.logged_in = False
         self.parent_window.status_label.setText(f"Not logged in")
+        self.parent_window.rebuild_frame("right")
         QMessageBox.information(self, "Success", "Logged out.")
         self.accept()
 
@@ -265,8 +255,9 @@ class ProfileWindow(QDialog):
 
         result = self.parent_window.data_manager.get_profile(username, password)
         if isinstance(result, Profile):
-            self.parent_window.current_profile = result
+            self.parent_window.logged_profile = result
             self.parent_window.status_label.setText(f"Status: Logged In as {username}")
+            self.parent_window.rebuild_frame("right")
             QMessageBox.information(self, "Success", "Profile changed."); self.accept()
 
         elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist. Go back to main menu to create new.")
@@ -274,16 +265,16 @@ class ProfileWindow(QDialog):
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}") # Catch all other DataManager string error results
 
     def delete_profile(self):
-        password, ok = QInputDialog.getText(self, "Security check", f"Enter Password for {self.profile.get_username()}:", QLineEdit.EchoMode.Password)
+        password, ok = QInputDialog.getText(self, "Security check", f"Enter Password for {self.logged_profile.get_username()}:", QLineEdit.EchoMode.Password)
         if not ok: return
 
         confirmation = QMessageBox.question(self, "Confirm Action", "Are you sure you want to proceed?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if confirmation != QMessageBox.StandardButton.Yes: return
 
-        success = self.parent_window.data_manager.delete_profile(self.profile, password)
+        success = self.parent_window.data_manager.delete_profile(self.logged_profile, password)
         if success is True:
-            self.parent_window.current_profile = None; self.parent_window.logged_in = False
+            self.parent_window.logged_profile = None; self.parent_window.logged_in = False
             self.parent_window.status_label.setText(f"Not logged in")
             QMessageBox.information(self, "Success", "Profile deleted.")
             self.save_on_close = False; self.accept()
@@ -299,7 +290,7 @@ class ProfileWindow(QDialog):
         # Ensure user selected a path (didn't click "Cancel")
         if file_path:
             try:
-                data_to_export = self.profile.get_data()
+                data_to_export = self.get_profile_data()
                 with open(file_path, "w") as f: json.dump(data_to_export, f, indent=4)
 
                 QMessageBox.information(self, "Success", f"Data exported to {file_path}")
@@ -317,11 +308,32 @@ class ProfileWindow(QDialog):
                 with open(file_path, "r") as f: imported_data = json.load(f)
 
                 # Update the profile data.
-                self.profile.update_data(imported_data)
+                self.logged_profile.update_data(imported_data)
                 QMessageBox.information(self, "Success", "Profile data imported and saved successfully.")
                 self.save_on_close = False; self.accept()
 
             except json.JSONDecodeError: QMessageBox.critical(self, "Import Error", "The file is not a valid JSON file.")
+            except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
+
+    def choose_profile_icon(self):
+        # Open the "Open File" Dialog
+        file_path, _ = QFileDialog.getOpenFileName(self, "Choose pofile icon.",
+            "",  # Default directory
+            "Image Files (*.png *.jpg *.jpeg);;All Files (*)") # File filters
+
+        # Ensure user selected a path (didn't click "Cancel")
+        if file_path:
+            try:
+                _, ext = os.path.splitext(file_path)
+
+                dest_path = os.path.join("profile_images", f"{self.logged_profile.get_username()}{ext.lower()}")
+                if os.path.exists(dest_path): os.remove(dest_path)
+                shutil.copy2(file_path, dest_path)
+
+                # Update the profile data.
+                QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
+                self.save_on_close = False; self.accept()
+
             except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 
     # Create a circular pixmap to use as a filler area
@@ -339,7 +351,7 @@ class ProfileWindow(QDialog):
 
     # Called when the window is closed
     def show_parent_on_close(self):
-        if self.save_on_close: self.profile.update_data({"Risk tolerance": self.risk_slider.value()})
+        if self.save_on_close: self.logged_profile.update_data({"Risk tolerance": self.risk_slider.value()})
         self.parent_window.show()
 
 
@@ -354,7 +366,6 @@ if __name__ == "__main__":
     window.show()
     sys.exit(app.exec())
 
-    # app = QApplication(sys.argv)
-    # main = ProfileWindow(None, None)
-    # main.show()
-    # sys.exit(app.exec_())
+
+
+

@@ -14,8 +14,9 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout
 
 from profile import Profile
 from load_data import peek_data, validate_ticker
-from custom_widgets import CustomButton, create_slider_layout, create_circle_label
+from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 
+############################################################################
 
 class ProfileWindow(QDialog):
     def __init__(self, parent_window: QMainWindow, profile_obj: Profile):
@@ -354,6 +355,7 @@ class ProfileWindow(QDialog):
         if self.save_on_close: self.logged_profile.update_data({"Risk tolerance": self.risk_slider.value()})
         self.parent_window.show()
 
+############################################################################
 
 if __name__ == "__main__":
     # from profile import DataManager

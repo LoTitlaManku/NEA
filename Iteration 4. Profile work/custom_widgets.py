@@ -4,7 +4,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QMouseEvent
 from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QSizePolicy,
-                             QLabel, QPushButton, QSlider)
+                             QWidget, QLayout, QLabel, QPushButton, QSlider)
 from typing import TYPE_CHECKING, Callable, Optional
 import os
 
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from main_gui import MainWindow
     from profile_gui import ProfileWindow
 
+############################################################################
 
 class CustomButton(QPushButton):
     def __init__(self, name: str, group: str, btn_type: str, parent: MainWindow | ProfileWindow,
@@ -86,6 +87,7 @@ class CustomButton(QPushButton):
             QPushButton[BorderBlank="true"]:pressed {{background-color: #858585}}
 """)
 
+############################################################################
 
 def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
     risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
@@ -103,6 +105,8 @@ def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
 
     risk_layout.addWidget(risk_value_label); risk_layout.addWidget(risk_slider); risk_layout.addLayout(number_layout)
     parent.risk_slider = risk_slider; return risk_layout
+
+############################################################################
 
 class ClickableLabel(QLabel):
     clicked = pyqtSignal()
@@ -131,8 +135,17 @@ def create_circle_label(parent: MainWindow | ProfileWindow, clickable: bool = Fa
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     return label
 
+############################################################################
 
+def add_to_layout(layout: QHBoxLayout | QVBoxLayout, items: list[QWidget | QLayout], size_ratios: list[int] = None, stretches: list[int] = None) -> None:
+    if stretches is None: stretches = []
+    if size_ratios is None: size_ratios = [0] * len(items)
+    for index, item in enumerate(items):
+        if isinstance(item, QWidget): layout.addWidget(item, size_ratios[index])
+        else: layout.addLayout(item, size_ratios[index])
+        if index in stretches: layout.addStretch()
 
+############################################################################
 
 if __name__ in "__main__":
     print("Wrong")

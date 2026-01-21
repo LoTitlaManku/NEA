@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout
 
 from profile import DataManager, Profile
 from profile_gui import ProfileWindow
-from custom_widgets import CustomButton, create_slider_layout, create_circle_label
+from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 
 ############################################################################
 
@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
                       ("remove_stock_btn", "img_src/remove_stock_icon_scaled.png", None), ("clear_graph_btn", "img_src/clear_graph_icon_scaled.png", None)   ]
         for name, img, img_2 in graph_btns: top_layout.addWidget(CustomButton(name, "top_btns", "indv", parent=self, img=img, secondary_img=img_2, width=100))
 
-        top_layout.addStretch(); top_layout.addWidget(CustomButton("save_graph_btn", "top_btns", "indv", parent=self, img="img_src/save_graph_icon.png", width=100))
+        add_to_layout(top_layout, [CustomButton("save_graph_btn", "top_btns", "indv", parent=self, img="img_src/save_graph_icon.png", width=100)], stretches=[0])
 
         # Define graph frame (TBD: to be developed further)
         graph_frame = QFrame(); layout = QVBoxLayout(graph_frame); layout.setContentsMargins(5, 5, 5, 5)
@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(graph_label)
 
         # Add top frame and graph frame to center layout
-        center_layout.addWidget(top_frame, 1); center_layout.addWidget(graph_frame, 10)
+        add_to_layout(center_layout, [top_frame, graph_frame], size_ratios=[1,10])
         return center_frame
 
     def build_right_frame(self) -> QFrame:
@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         right_frame = QFrame(); right_layout = QVBoxLayout(right_frame); right_layout.setContentsMargins(0 ,0 ,0 ,0)
 
         ## Define profile frame with circle widget and label
-        profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
+        profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: none;")
         profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         for widget in [create_circle_label(self, clickable=True, diameter=120), self.status_label]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -87,10 +87,10 @@ class MainWindow(QMainWindow):
         self.ticker_symbol_inbox.setStyleSheet("font-size: 16px; font-family: Aller Display"); self.ticker_symbol_inbox.setFixedHeight(30)
 
         # Type of prediction selection widgets
-        prediction_type_layout = QHBoxLayout(); prediction_type_layout.setSpacing(10)
+        pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
 
         pd_btns = [("linear_regression_btn", "Linear Reg"), ("random_forrest_btn", "Random Forrest"), ("ri_btn", "Reinforcement Learning")]
-        for name, text in pd_btns: prediction_type_layout.addWidget(CustomButton(name, "prediction_type_btns", "text_grp", parent=self, text=text, width=75, height=30))
+        for name, text in pd_btns: pd_type_layout.addWidget(CustomButton(name, "prediction_type_btns", "text_grp", parent=self, text=text, width=75, height=30))
 
         # Time period selection widgets
         time_period_layout = QHBoxLayout(); time_period_layout.setSpacing(10)
@@ -104,19 +104,17 @@ class MainWindow(QMainWindow):
         for name, img in conf_btns: confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv", parent=self, img=img, width=70, height=70))
 
         # Add all prediction setting widgets to prediction settings layout
-        pd_set_layout.addWidget(self.ticker_symbol_inbox)
-        for layout in [prediction_type_layout, create_slider_layout(self), time_period_layout, confirmations_layout]: pd_set_layout.addLayout(layout)
-        pd_set_layout.addStretch()
+        add_to_layout(pd_set_layout, [self.ticker_symbol_inbox, pd_type_layout, create_slider_layout(self), time_period_layout, confirmations_layout], stretches=[4])
 
         # Define prediction result widget (TBD: to be developed further)
         prediction_result_frame = QFrame(); prediction_result_frame.setStyleSheet("border: 1px solid black")
         prediction_result_layout = QVBoxLayout(prediction_result_frame)
-        self.prediction_result_label = QLabel("Prediction result"); self.prediction_result_label.setAlignment(Qt.AlignmentFlag.AlignCenter); self.prediction_result_label.setWordWrap(True)
-        self.prediction_result_label.setStyleSheet("border: none")
+        self.prediction_result_label = QLabel("Prediction result"); self.prediction_result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.prediction_result_label.setWordWrap(True); self.prediction_result_label.setStyleSheet("border: none")
         prediction_result_layout.addWidget(self.prediction_result_label)
 
         # Add profile, prediction settings, and result frames to right frame
-        right_layout.addWidget(profile_frame, 1); right_layout.addWidget(self.pd_set_frame, 10); right_layout.addWidget(prediction_result_frame, 10)
+        add_to_layout(right_layout, [profile_frame, self.pd_set_frame, prediction_result_frame], size_ratios=[1,10,10])
         return right_frame
 
     def rebuild_frame(self, frame_pos: str) -> None:
@@ -242,6 +240,8 @@ Time Period: {selected_time_period}
 
 
     def closeEvent(self, event) -> None: event.accept()
+
+############################################################################
 
 if __name__ == "__main__":
     # Start the application

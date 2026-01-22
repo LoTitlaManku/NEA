@@ -33,9 +33,15 @@ class ProfileWindow(QDialog):
         self.finished.connect(self.show_parent_on_close)
 
         # Set up main layout with left and right frames
+        # self.main_layout = QVBoxLayout(self)
+        # self.top_frame = self.build_top_frame(); self.bottom_frame = self.build_bottom_frame()
+        # self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
+
         self.main_layout = QVBoxLayout(self)
-        self.top_frame = self.build_top_frame(); self.bottom_frame = self.build_bottom_frame()
-        self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
+        self.main_frames = {"top": [self.build_top_frame(), 1], "bottom": [self.build_bottom_frame(), 2]}
+        for frame_info in self.main_frames.values(): self.main_layout.addWidget(frame_info[0], frame_info[1])
+
+
 
     def build_top_frame(self) -> QFrame:
         # Initialize the top frame with profile settings and preferences
@@ -240,6 +246,18 @@ class ProfileWindow(QDialog):
         self.top_frame = self.build_top_frame(); self.bottom_frame = self.build_bottom_frame()
         self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
 
+    def rebuild_frame(self, frame_pos: str) -> None:
+        old = self.main_frames.get(frame_pos)[0]
+        stretch = self.main_frames.get(frame_pos)[1]
+        self.main_layout.removeWidget(old); old.setParent(None)
+        old.deleteLater()
+
+        new = getattr(self, f"build_{frame_pos}_frame")()
+        self.main_frames.update({frame_pos: [new, stretch]})
+        self.main_layout.addWidget(new, stretch)
+
+
+
     def logout(self):
         self.parent_window.logged_profile = None; self.parent_window.logged_in = False
         self.parent_window.status_label.setText(f"Not logged in")
@@ -325,15 +343,21 @@ class ProfileWindow(QDialog):
         # Ensure user selected a path (didn't click "Cancel")
         if file_path:
             try:
+                print(file_path)
                 _, ext = os.path.splitext(file_path)
-
+                print(ext)
                 dest_path = os.path.join("profile_images", f"{self.logged_profile.get_username()}{ext.lower()}")
                 if os.path.exists(dest_path): os.remove(dest_path)
-                shutil.copy2(file_path, dest_path)
+                print(dest_path)
+                # shutil.copy2(file_path, dest_path)
+                img = QPixmap(file_path).scaled(70,70)
+                img.save(dest_path)
+
+                self.rebuild_frame("top")
+                # self.refresh_window()
 
                 # Update the profile data.
                 QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
-                self.save_on_close = False; self.accept()
 
             except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 

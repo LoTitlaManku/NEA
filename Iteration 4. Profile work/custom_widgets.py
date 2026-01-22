@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QMouseEvent
+from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QPen, QColor, QMouseEvent
 from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QSizePolicy,
                              QWidget, QLayout, QLabel, QPushButton, QSlider)
 from typing import TYPE_CHECKING, Callable, Optional
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 class CustomButton(QPushButton):
     def __init__(self, name: str, group: str, btn_type: str, parent: MainWindow | ProfileWindow,
-                 text: str = None, img: str = None, secondary_img: str = None, width: int = None, height: int = None, *args, **kwargs):
+                 text: str = None, img: str = None, secondary_img: str = None, desc: str = None, width: int = None, height: int = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.name = name
@@ -48,8 +48,9 @@ class CustomButton(QPushButton):
         elif width: self.setFixedWidth(width)
 
         if text: self.setText(text)
+        if desc: self.setToolTip(desc)
         if "grp" in self.btn_type or self.img_2: self.setCheckable(True)
-        self.update_appearance(is_active=False)
+        self.init_appearance()
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         self.clicked.connect(self.handle_click)
@@ -68,31 +69,38 @@ class CustomButton(QPushButton):
         if action: action()
         else: print(f"No specific action defined for {self.name}")
 
-    def update_appearance(self, is_active: bool) -> None:
-        bg = "#8a8a8a" if is_active else "#e3e3e3"
+    def init_appearance(self) -> None:
         img_css = f"background-image: url('{self.img}'); background-repeat: no-repeat; background-position: center;" if self.img else ""
         press_css = "background-color: #858585;" if (self.btn_type == "indv" and not self.img_2) else ""
         second_img_css = f"background-image: url('{self.img_2 if self.img_2 else self.img}'); background-repeat: no-repeat; background-position: center;" if self.img_2 else ""
 
         self.setStyleSheet(f"""
+                QPushButton {{ {img_css} background-color: #e3e3e3; border: none; font-size: 13px; font-family: Aller display}}
+                QPushButton:hover {{background-color: #adadad}}
+                QPushButton:pressed {{ {press_css} }} 
+
+                QPushButton:checked {{ {second_img_css} background-color: #e3e3e3}} 
+                QPushButton:checked:hover {{background-color: #adadad}}
+
+                QPushButton[BorderBlank="true"] {{ {img_css} background-color: #ffffff; border: 1px solid black}}
+                QPushButton[BorderBlank="true"]:hover {{background-color: #adadad}}
+                QPushButton[BorderBlank="true"]:pressed {{background-color: #858585}}
+    """)
+
+    def update_appearance(self, is_active: bool) -> None:
+        bg = "#8a8a8a" if is_active else "#e3e3e3"
+        img_css = f"background-image: url('{self.img}'); background-repeat: no-repeat; background-position: center;" if self.img else ""
+
+        self.setStyleSheet(f"""
             QPushButton {{ {img_css} background-color: {bg}; border: none; font-size: 13px; font-family: Aller display}}
-            QPushButton:hover {{ {"" if is_active else "background-color: #adadad"} }}
-            QPushButton:pressed {{ {press_css} }} 
-            
-            QPushButton:checked {{ {second_img_css} background-color: {bg}}} 
-            QPushButton:checked:hover {{ {"" if is_active else "background-color: #adadad"} }}
-            
-            QPushButton[BorderBlank="true"] {{ {img_css} background-color: #ffffff; border: 1px solid black}}
-            QPushButton[BorderBlank="true"]:hover {{background-color: #adadad}}
-            QPushButton[BorderBlank="true"]:pressed {{background-color: #858585}}
-""")
+            QPushButton:hover {{ {"" if is_active else "background-color: #adadad"} }} """)
 
 ############################################################################
 
 def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
     risk_layout = QVBoxLayout(); risk_layout.setSpacing(0)
 
-    current_tolerance = parent.get_profile_data().get("Risk tolerance", 4)
+    current_tolerance = parent.get_profile_data().get("data", {}).get("Risk tolerance", 4)
     risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}"""); risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1); risk_slider.setSingleStep(1); risk_slider.setValue(current_tolerance)
     risk_slider.valueChanged.connect(lambda v: risk_value_label.setText(f"Risk tolerance: {v} {'(Current)' if v == current_tolerance else ('(Recommended)' if v == 4 else '')}"))
@@ -114,7 +122,7 @@ class ClickableLabel(QLabel):
         if event.button() == Qt.MouseButton.LeftButton: self.clicked.emit()
         super().mouseReleaseEvent(event)
 
-def create_circle_label(parent: MainWindow | ProfileWindow, clickable: bool = False, diameter: int = 100) -> QLabel:
+def create_circle_label(parent: MainWindow | ProfileWindow, clickable: bool = False, diameter: int = 100, desc: str = None, border: bool = True) -> QLabel:
     base = os.path.join("profile_images", parent.get_profile_data().get("username", "person_icon"))
     pixmap = QPixmap(next((base + ext for ext in [".png", ".jpg", ".jpeg"] if os.path.exists(base + ext)), "profile_images/person_icon.jpg"))
     if pixmap.isNull(): pixmap = QPixmap("profile_images/person_icon.jpg")
@@ -126,24 +134,32 @@ def create_circle_label(parent: MainWindow | ProfileWindow, clickable: bool = Fa
     path = QPainterPath(); path.addEllipse(0, 0, diameter, diameter)
     painter.setClipPath(path)
 
-    painter.drawPixmap(0, 0, pixmap); painter.end()
+    painter.drawPixmap(0, 0, pixmap)
+    if border:
+        painter.setPen(QPen(QColor("#00aa00"), 3))
+        painter.drawEllipse(1, 1, diameter - 3, diameter - 3)
+
+    painter.end()
 
     if clickable: label = ClickableLabel(); label.clicked.connect(parent.label_click)
     else: label = QLabel()
 
     label.setPixmap(mask)
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    label.setCursor(Qt.CursorShape.PointingHandCursor)
+    if desc: label.setToolTip(desc)
     return label
 
 ############################################################################
 
-def add_to_layout(layout: QHBoxLayout | QVBoxLayout, items: list[QWidget | QLayout], size_ratios: list[int] = None, stretches: list[int] = None) -> None:
+def add_to_layout(layout: QHBoxLayout | QVBoxLayout, items: list[QWidget | QLayout], size_ratios: list[int] = None, stretches: list[int] = None, alignment: Qt.AlignmentFlag = Qt.AlignmentFlag(0)) -> None:
     if stretches is None: stretches = []
     if size_ratios is None: size_ratios = [0] * len(items)
     for index, item in enumerate(items):
-        if isinstance(item, QWidget): layout.addWidget(item, size_ratios[index])
-        else: layout.addLayout(item, size_ratios[index])
         if index in stretches: layout.addStretch()
+        if isinstance(item, QWidget): layout.addWidget(item, size_ratios[index], alignment=alignment)
+        else: layout.addLayout(item, size_ratios[index])
+    if -1 in stretches: layout.addStretch()
 
 ############################################################################
 

@@ -2,10 +2,10 @@
 import io
 import os
 import sys
-import shutil
 import json
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.ioff()
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QCursor, QImage
@@ -29,29 +29,22 @@ class ProfileWindow(QDialog):
         self.btns = {"profile_btns": [], "Na": []}
 
         # Switch back to main window when closed
-        self.save_on_close = True
         self.finished.connect(self.show_parent_on_close)
 
         # Set up main layout with left and right frames
-        # self.main_layout = QVBoxLayout(self)
-        # self.top_frame = self.build_top_frame(); self.bottom_frame = self.build_bottom_frame()
-        # self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
-
         self.main_layout = QVBoxLayout(self)
         self.main_frames = {"top": [self.build_top_frame(), 1], "bottom": [self.build_bottom_frame(), 2]}
         for frame_info in self.main_frames.values(): self.main_layout.addWidget(frame_info[0], frame_info[1])
 
-
-
     def build_top_frame(self) -> QFrame:
         # Initialize the top frame with profile settings and preferences
-        top_frame = QFrame(); top_layout = QHBoxLayout(top_frame); top_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        top_layout.setContentsMargins(75, 5, 5, 20)
+        top_frame = QFrame(); top_layout = QHBoxLayout(top_frame); top_layout.setContentsMargins(75, 5, 5, 20)
 
         ## Define profile widget, username and add to a container layout
-        profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
-        profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        for widget in [create_circle_label(self, clickable=True, diameter=120), QLabel(self.logged_profile.get_username())]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;"); profile_frame_layout = QVBoxLayout(profile_frame)
+        profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        add_to_layout(profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
+                      items=[create_circle_label(self, clickable=True, diameter=120, desc="Click to select a profile image"), QLabel(self.logged_profile.get_username())])
 
         ## Define profile and preferences settings
         setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black"); setting_frame.setFixedHeight(200)
@@ -64,13 +57,11 @@ class ProfileWindow(QDialog):
         edit_btns = [("logout_btn", "img_src/logout.png"), ("change_profile_btn", "img_src/change_profile_icon.png"),
                      ("export_data_btn", "img_src/export_data.png"), ("import_data_btn", "img_src/import_data.png"),
                      ("delete_profile_btn", "img_src/delete.png")]
-        for name, img in edit_btns: edit_layout.addWidget(CustomButton(name, "profile_btns", "indv", parent=self, img=img))
-
-        risk_layout = create_slider_layout(self)
-        setting_layout.addWidget(edit_frame); setting_layout.addLayout(risk_layout)
+        add_to_layout(edit_layout, [CustomButton(name, "profile_btns", "indv", parent=self, img=img) for name, img in edit_btns])
+        add_to_layout(setting_layout, [edit_frame, create_slider_layout(self)])
 
         # Add profile settings and preferences to top frame
-        for widget in [profile_frame, setting_frame]: top_layout.addWidget(widget); top_layout.addStretch()
+        add_to_layout(top_layout, [profile_frame, setting_frame], stretches=[1,-1])
         return top_frame
 
     def build_bottom_frame(self) -> QFrame:
@@ -83,7 +74,8 @@ class ProfileWindow(QDialog):
         compound_stocks_widget = QScrollArea(); compound_stocks_widget.setWidgetResizable(True); compound_stocks_widget.setStyleSheet("border: none")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        for index, ticker in enumerate(self.get_profile_data()["Saved stocks"]):
+        saved_tickers = self.get_profile_data().get("data", {}).get("Saved stocks", [])
+        for index, ticker in enumerate(saved_tickers):
             data = peek_data(ticker, 1)
             if data is None: continue
 
@@ -98,8 +90,7 @@ class ProfileWindow(QDialog):
             percent_label = QLabel(f"{'+' if last_price < now_price else '-'}{price_change}%")
             percent_label.setStyleSheet(f"border: none; color: {'#008000' if last_price < now_price else '#FF0000'}")
 
-            row_layout.addWidget(ticker_label); row_layout.addStretch(); row_layout.addWidget(percent_label)
-
+            add_to_layout(row_layout, [ticker_label, percent_label], stretches=[1])
             row_frame.setCursor(Qt.CursorShape.PointingHandCursor)
             row_frame.mousePressEvent = lambda event, t=ticker, i=index: self.show_stock_menu(t, i)
 
@@ -119,7 +110,7 @@ class ProfileWindow(QDialog):
         confirm_btn = CustomButton("search_confirm_btn", "Na", "indv", parent=self, img="img_src/confirm_icon_scaled.png", width=60, height=40)
         confirm_btn.setProperty("BorderBlank", "true"); confirm_btn.style().unpolish(confirm_btn); confirm_btn.style().polish(confirm_btn)
         
-        search_layout.addWidget(self.search_input); search_layout.addWidget(confirm_btn)
+        add_to_layout(search_layout, [self.search_input, confirm_btn])
 
 
         scroll_container = QFrame(); scroll_container.setStyleSheet("border: 1px solid black")
@@ -128,12 +119,12 @@ class ProfileWindow(QDialog):
         detailed_stocks_widget = QScrollArea(); detailed_stocks_widget.setWidgetResizable(True); detailed_stocks_widget.setStyleSheet("border: None")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        for index, ticker in enumerate(self.get_profile_data()["Saved stocks"]): scroll_layout.addWidget(self.create_stock_card(ticker, index))
+        for index, ticker in enumerate(saved_tickers): scroll_layout.addWidget(self.create_stock_card(ticker, index))
 
         detailed_stocks_widget.setWidget(scroll_widget); scroll_container_layout.addWidget(detailed_stocks_widget)
 
-        right_layout.addLayout(search_layout); right_layout.addWidget(scroll_container)
-        bottom_layout.addWidget(left_frame); bottom_layout.addWidget(right_frame)
+        add_to_layout(right_layout, [search_layout, scroll_container])
+        add_to_layout(bottom_layout, [left_frame, right_frame])
         return bottom_frame
 
     # Creates a detailed stock row widget
@@ -141,8 +132,7 @@ class ProfileWindow(QDialog):
         df = peek_data(ticker, 30, "1d")
         if df is None: return
 
-        last_price = df.iloc[0]['Close']
-        now_price = df.iloc[-1]['Close']
+        last_price, now_price = df.iloc[0]['Close'], df.iloc[-1]['Close']
         price_change = round(abs((now_price - last_price) / last_price) * 100, 2)
 
         card = QFrame(); card.setFixedHeight(120); card.setStyleSheet("border: 2px solid black; margin-bottom: 5px; background-color: white;")
@@ -184,17 +174,14 @@ class ProfileWindow(QDialog):
         percent_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         percent_label.setFixedWidth(120)
 
-        layout.addWidget(ticker_label)
-        layout.addWidget(chart_area, 1)
-        layout.addWidget(percent_label)
-
+        add_to_layout(layout, [ticker_label, chart_area, percent_label], size_ratios=[0,1,0])
         card.setCursor(Qt.CursorShape.PointingHandCursor)
         card.mousePressEvent = lambda event, t=ticker, i=index: self.show_stock_menu(t, i)
         return card
 
-    def get_profile_data(self):
+    def get_profile_data(self) -> dict:
         if self.logged_profile is None: return {}
-        else: return self.logged_profile.get_data()
+        else: return {"username": self.logged_profile.get_username(), "data": self.logged_profile.get_data()}
 
     def label_click(self): self.choose_profile_icon()
 
@@ -205,7 +192,7 @@ class ProfileWindow(QDialog):
 
         # Disable Move Up if at top, Move Down if at bottom
         if current_index == 0: move_up.setEnabled(False)
-        if current_index == len(self.get_profile_data()["Saved stocks"]) - 1: move_down.setEnabled(False)
+        if current_index == len(self.get_profile_data().get("data", {}).get("Saved stocks", [])) - 1: move_down.setEnabled(False)
 
         # Show menu at the current mouse position
         action = menu.exec(QCursor().pos())
@@ -215,48 +202,38 @@ class ProfileWindow(QDialog):
 
     # Swaps stock positions in the list and refreshes UI
     def reorder_stock(self, old_idx: int, new_idx: int) -> None:
-        stocks = self.get_profile_data()["Saved stocks"]
+        stocks = self.get_profile_data().get("data", {}).get("Saved stocks", [])
         stocks[old_idx], stocks[new_idx] = stocks[new_idx], stocks[old_idx]
         self.logged_profile.update_data({"Saved stocks": stocks})
-        self.refresh_window()
+        self.rebuild_frame("bottom")
 
     # Removes a stock from profile data and refreshes UI
     def remove_stock(self, ticker: str) -> None:
-        current_data = self.get_profile_data()
-        current_data["Saved stocks"] = [s for s in current_data["Saved stocks"] if s != ticker]
+        current_data = self.get_profile_data().get("data", {})
+        current_data["Saved stocks"] = [s for s in current_data.get("Saved stocks", []) if s != ticker]
         self.logged_profile.update_data(current_data)
-        self.refresh_window()
+        self.rebuild_frame("bottom")
 
     # Adds a stock to profile data and refreshes UI
     def add_stock(self):
         if not self.search_input.text(): return
         ticker = self.search_input.text().upper()
         if not validate_ticker(ticker): QMessageBox.critical(self, "Failed", "Invalid ticker."); return
-        current_data = self.get_profile_data()
-        current_data["Saved stocks"].insert(0, ticker)
-        self.logged_profile.update_data(current_data)
-        self.refresh_window()
+        current_data = self.get_profile_data().get("data", {}).get("Saved stocks", [])
+        current_data.insert(0, ticker)
+        self.logged_profile.update_data({"Saved stocks": current_data})
+        self.rebuild_frame("bottom")
 
     # Refreshes window to update information
-    def refresh_window(self) -> None:
-        # Remove current widgets from the main layout
-        self.main_layout.removeWidget(self.top_frame); self.main_layout.removeWidget(self.bottom_frame)
-        del self.top_frame, self.bottom_frame
-        # Recreate window and add widgets back in
-        self.top_frame = self.build_top_frame(); self.bottom_frame = self.build_bottom_frame()
-        self.main_layout.addWidget(self.top_frame, 1); self.main_layout.addWidget(self.bottom_frame, 2)
-
     def rebuild_frame(self, frame_pos: str) -> None:
-        old = self.main_frames.get(frame_pos)[0]
-        stretch = self.main_frames.get(frame_pos)[1]
+        old, stretch = self.main_frames.get(frame_pos)
+        index = self.main_layout.indexOf(old)
         self.main_layout.removeWidget(old); old.setParent(None)
         old.deleteLater()
 
         new = getattr(self, f"build_{frame_pos}_frame")()
         self.main_frames.update({frame_pos: [new, stretch]})
-        self.main_layout.addWidget(new, stretch)
-
-
+        self.main_layout.insertWidget(index, new, stretch)
 
     def logout(self):
         self.parent_window.logged_profile = None; self.parent_window.logged_in = False
@@ -296,7 +273,7 @@ class ProfileWindow(QDialog):
             self.parent_window.logged_profile = None; self.parent_window.logged_in = False
             self.parent_window.status_label.setText(f"Not logged in")
             QMessageBox.information(self, "Success", "Profile deleted.")
-            self.save_on_close = False; self.accept()
+            self.accept()
         elif success == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
         else: QMessageBox.critical(self, "Error", f"Failed to delete data.")
 
@@ -309,7 +286,7 @@ class ProfileWindow(QDialog):
         # Ensure user selected a path (didn't click "Cancel")
         if file_path:
             try:
-                data_to_export = self.get_profile_data()
+                data_to_export = self.get_profile_data().get("data", {})
                 with open(file_path, "w") as f: json.dump(data_to_export, f, indent=4)
 
                 QMessageBox.information(self, "Success", f"Data exported to {file_path}")
@@ -329,7 +306,7 @@ class ProfileWindow(QDialog):
                 # Update the profile data.
                 self.logged_profile.update_data(imported_data)
                 QMessageBox.information(self, "Success", "Profile data imported and saved successfully.")
-                self.save_on_close = False; self.accept()
+                self.accept()
 
             except json.JSONDecodeError: QMessageBox.critical(self, "Import Error", "The file is not a valid JSON file.")
             except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
@@ -343,40 +320,21 @@ class ProfileWindow(QDialog):
         # Ensure user selected a path (didn't click "Cancel")
         if file_path:
             try:
-                print(file_path)
                 _, ext = os.path.splitext(file_path)
-                print(ext)
                 dest_path = os.path.join("profile_images", f"{self.logged_profile.get_username()}{ext.lower()}")
                 if os.path.exists(dest_path): os.remove(dest_path)
-                print(dest_path)
-                # shutil.copy2(file_path, dest_path)
+
                 img = QPixmap(file_path).scaled(70,70)
                 img.save(dest_path)
-
                 self.rebuild_frame("top")
-                # self.refresh_window()
-
-                # Update the profile data.
                 QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
 
             except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 
-    # Create a circular pixmap to use as a filler area
-    @staticmethod
-    def circle_bitmap(pixmap, diameter) -> QPixmap:
-        pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
-        mask = QPixmap(diameter, diameter); mask.fill(Qt.GlobalColor.transparent)
-
-        painter = QPainter(mask)
-        path = QPainterPath(); path.addEllipse(0, 0, diameter, diameter)
-        painter.setClipPath(path)
-
-        painter.drawPixmap(0, 0, pixmap); painter.end()
-        return mask
-
     # Called when the window is closed
     def show_parent_on_close(self):
-        if self.save_on_close: self.logged_profile.update_data({"Risk tolerance": self.risk_slider.value()})
+        if self.risk_slider.value() != self.logged_profile.get_data().get("Risk tolerance"):
+            self.logged_profile.update_data({"Risk tolerance": self.risk_slider.value()})
         self.parent_window.show()
 
 ############################################################################

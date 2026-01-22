@@ -1,6 +1,7 @@
 
 import sys
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
                              QWidget, QLabel, QFrame, QDialog, QLineEdit)
 
@@ -51,17 +52,19 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout(top_frame); top_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter); top_layout.setContentsMargins(0 ,0 ,0 ,0); top_layout.setSpacing(0)
 
         # Define graph stock edit buttons
-        graph_btns = [("graph_type_btn", "img_src/candlestick_icon_scaled.png", "img_src/line_graph_icon_scaled.png"), ("add_stock_btn", "img_src/add_stock_icon_scaled.png", None),
-                      ("remove_stock_btn", "img_src/remove_stock_icon_scaled.png", None), ("clear_graph_btn", "img_src/clear_graph_icon_scaled.png", None)   ]
-        for name, img, img_2 in graph_btns: top_layout.addWidget(CustomButton(name, "top_btns", "indv", parent=self, img=img, secondary_img=img_2, width=100))
+        graph_btns = [("graph_type_btn", "img_src/candlestick_icon_scaled.png", "img_src/line_graph_icon_scaled.png", "Switch between candlestick and line graph formats"),
+                      ("add_stock_btn", "img_src/add_stock_icon_scaled.png", None, "Add a stock to the graph (NOTE: if prediction plotted, it will not work)"),
+                      ("remove_stock_btn", "img_src/remove_stock_icon_scaled.png", None, "Remove a stock from the graph"),
+                      ("clear_graph_btn", "img_src/clear_graph_icon_scaled.png", None, "Clear the graph of all stocks and annotations")   ]
+        for name, img, img_2, desc in graph_btns:
+            top_layout.addWidget(CustomButton(name, "top_btns", "indv", parent=self, img=img, secondary_img=img_2, desc=desc, width=100))
 
-        add_to_layout(top_layout, [CustomButton("save_graph_btn", "top_btns", "indv", parent=self, img="img_src/save_graph_icon.png", width=100)], stretches=[0])
+        save_graph_btn = CustomButton("save_graph_btn", "top_btns", "indv", parent=self, img="img_src/save_graph_icon.png", desc="Save the current state of the graph", width=100)
+        add_to_layout(top_layout, [save_graph_btn], stretches=[0])
 
         # Define graph frame (TBD: to be developed further)
-        graph_frame = QFrame(); layout = QVBoxLayout(graph_frame); layout.setContentsMargins(5, 5, 5, 5)
-        graph_frame.setStyleSheet("border: 1px solid black")
-        graph_label = QLabel("Graph Area"); graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        graph_label.setStyleSheet("border: none")
+        graph_frame = QFrame(); layout = QVBoxLayout(graph_frame); layout.setContentsMargins(5, 5, 5, 5); graph_frame.setStyleSheet("border: 1px solid black")
+        graph_label = QLabel("Graph Area"); graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter); graph_label.setStyleSheet("border: none")
         layout.addWidget(graph_label)
 
         # Add top frame and graph frame to center layout
@@ -76,7 +79,9 @@ class MainWindow(QMainWindow):
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: none;")
         profile_frame_layout = QVBoxLayout(profile_frame); profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        for widget in [create_circle_label(self, clickable=True, diameter=120), self.status_label]: profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        desc = "Click to log in" if not self.logged_in else "Click to switch to profile overview window"
+        for widget in [create_circle_label(self, clickable=True, diameter=120, desc=desc, border=self.logged_in), self.status_label]:
+            profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
 
         ## Define prediction settings frame (pd_set = prediction_settings) and widgets within
         self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
@@ -104,7 +109,7 @@ class MainWindow(QMainWindow):
         for name, img in conf_btns: confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv", parent=self, img=img, width=70, height=70))
 
         # Add all prediction setting widgets to prediction settings layout
-        add_to_layout(pd_set_layout, [self.ticker_symbol_inbox, pd_type_layout, create_slider_layout(self), time_period_layout, confirmations_layout], stretches=[4])
+        add_to_layout(pd_set_layout, [self.ticker_symbol_inbox, pd_type_layout, create_slider_layout(self), time_period_layout, confirmations_layout], stretches=[-1])
 
         # Define prediction result widget (TBD: to be developed further)
         prediction_result_frame = QFrame(); prediction_result_frame.setStyleSheet("border: 1px solid black")
@@ -118,18 +123,18 @@ class MainWindow(QMainWindow):
         return right_frame
 
     def rebuild_frame(self, frame_pos: str) -> None:
-        old = self.main_frames.get(frame_pos)[0]
-        stretch = self.main_frames.get(frame_pos)[1]
+        old, stretch = self.main_frames.get(frame_pos)
+        index = self.main_layout.indexOf(old)
         self.main_layout.removeWidget(old); old.setParent(None)
         old.deleteLater()
 
         new = getattr(self, f"build_{frame_pos}_frame")()
         self.main_frames.update({frame_pos: [new, stretch]})
-        self.main_layout.addWidget(new, stretch)
+        self.main_layout.insertWidget(index, new, stretch)
 
-    def get_profile_data(self):
+    def get_profile_data(self) -> dict:
         if self.logged_profile is None: return {}
-        else: return self.logged_profile.get_data()
+        else: return {"username": self.logged_profile.get_username(), "data": self.logged_profile.get_data()}
 
     def label_click(self):
         if self.logged_in:
@@ -145,7 +150,8 @@ class MainWindow(QMainWindow):
         password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:", QLineEdit.EchoMode.Password)
         if not ok: return
 
-        # if not all(6 <= len(w) <= 64 for w in [username, password]): QMessageBox.critical(self, "Error", "Username or password is too short."); return
+        if not all(1 <= len(w) <= 64 for w in [username, password]) and not all(c for c in username if c.isalnum() or c in [" ", "_"]): # change 1 back to 6
+            QMessageBox.critical(self, "Error", "Username or password is too short."); return
 
         result = self.data_manager.get_profile(username, password)
         if isinstance(result, Profile):
@@ -177,7 +183,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
     def start_prediction_simulation(self) -> None:
-        print("Prediction starting...") # DEBUG
         # Find ticker and risk level inputs, prediction type button, and time period button
         ticker = self.ticker_symbol_inbox.text(); risk_level = self.risk_slider.value()
         selected_prediction_type = next((btn.text() for btn in self.btns["prediction_type_btns"] if btn.isChecked()), None)
@@ -192,7 +197,6 @@ class MainWindow(QMainWindow):
         self.prediction_result_label.setText("Processing... (3s)")
 
         def finish_prediction_simulation():
-            print("Prediction finished.")  # DEBUG
             # Re-enable prediction settings and show results (TBD: to be developed further)
             self.pd_set_frame.setEnabled(True)
             self.prediction_result_label.setText(f"""
@@ -229,7 +233,6 @@ Time Period: {selected_time_period}
 
     # Helper function to save the state of the graph when button pressed (TBD: to be developed further)
     def save_graph(self, input_box) -> None:
-        print(f"Saved. {input_box.text()}")
         msg = QWidget(self); msg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.BypassWindowManagerHint); msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
 
         layout = QVBoxLayout(msg)
@@ -246,6 +249,7 @@ Time Period: {selected_time_period}
 if __name__ == "__main__":
     # Start the application
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon("img_src/stocks.png"))
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

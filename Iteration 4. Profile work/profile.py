@@ -35,6 +35,7 @@ class DataManager:
 
         if not os.path.exists(self.__key_file): self.save_encrypt_file(self.__key_file, {}, self.__master_key)
         if not os.path.exists(self.__data_file): json.dump({}, open(self.__data_file, "w"))
+        if not os.path.exists("profile_images"): os.makedirs("profile_images")
 
         # {username: key, username: key ...}
         self.__keys = self.load_decrypt_file(self.__key_file, self.__master_key)
@@ -125,9 +126,3 @@ if __name__ in "__main__":
     print(pr.get_data())
     print(pr.get_data()["Risk tolerance"])
 
-    # profile = manage.get_profile("username3", "password")
-    # print(profile.get_data())
-    #
-    # profile.update_data({"Saved stocks": ["TSLA"]})
-    #
-    # print(profile.get_data())

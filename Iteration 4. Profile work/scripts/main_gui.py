@@ -9,6 +9,11 @@ from profile import DataManager, Profile
 from profile_gui import ProfileWindow
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 
+# To find the absolute path of image files
+import os
+from scripts.config import IMG_DIR
+def abs_file(file): return str(os.path.join(IMG_DIR, file))
+
 ############################################################################
 
 class MainWindow(QMainWindow):
@@ -16,7 +21,7 @@ class MainWindow(QMainWindow):
         # Initialize the main window and dictionaries for button groups
         super().__init__()
         self.setWindowTitle("Stock Prediction App")
-        self.setWindowIcon(QIcon("img_src/stocks.png"))
+        self.setWindowIcon(QIcon(abs_file("stocks.png")))
         self.setGeometry(100, 100, 1500, 900)
         self.setStyleSheet("QWidget {background-color: white; color: black;}")
         self.btns = {"left_btns": [], "top_btns": [], "prediction_type_btns": [], "time_period_btns": [], "confirmation_btns": []}
@@ -41,8 +46,8 @@ class MainWindow(QMainWindow):
         # Create tool buttons with the custom class and add to left frame
         add_to_layout(left_layout,  stretches=[-1],
             items=[CustomButton(name, "left_btns", "img_grp", parent=self, img=img, height=100)
-                for name,img in [("mouse_tool", "img_src/mouse_icon_scaled.png"), ("line_tool", "img_src/line_icon_scaled.png"), ("notes_tool", "img_src/notes_icon_scaled.png")]])
-
+                for name,img in [("mouse_tool", abs_file("mouse_icon_scaled.png")), ("line_tool", abs_file("line_icon_scaled.png")),
+                                 ("notes_tool", abs_file("notes_icon_scaled.png"))]])
         return left_frame
 
     # Initialize the center frame with top bar and graph area
@@ -55,11 +60,11 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout(top_frame); top_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter); top_layout.setContentsMargins(0 ,0 ,0 ,0); top_layout.setSpacing(0)
 
         # Create graph edit buttons with custom class and add to top frame
-        graph_btns = [("graph_type_btn", "img_src/candlestick_icon_scaled.png", "img_src/line_graph_icon_scaled.png", "Switch between candlestick and line graph formats"),
-                      ("add_stock_btn", "img_src/add_stock_icon_scaled.png", None, "Add a stock to the graph (NOTE: if prediction plotted, it will not work)"),
-                      ("remove_stock_btn", "img_src/remove_stock_icon_scaled.png", None, "Remove a stock from the graph"),
-                      ("clear_graph_btn", "img_src/clear_graph_icon_scaled.png", None, "Clear the graph of all stocks and annotations"),
-                      ("save_graph_btn", "img_src/save_graph_icon.png", None, "Save the current state of the graph")]
+        graph_btns = [("graph_type_btn", abs_file("candlestick_icon_scaled.png"), abs_file("line_graph_icon_scaled.png"), "Switch between candlestick and line graph formats"),
+                      ("add_stock_btn", abs_file("add_stock_icon_scaled.png"), None, "Add a stock to the graph (NOTE: if prediction plotted, it will not work)"),
+                      ("remove_stock_btn", abs_file("remove_stock_icon_scaled.png"), None, "Remove a stock from the graph"),
+                      ("clear_graph_btn", abs_file("clear_graph_icon_scaled.png"), None, "Clear the graph of all stocks and annotations"),
+                      ("save_graph_btn", abs_file("save_graph_icon.png"), None, "Save the current state of the graph")]
         add_to_layout(top_layout, stretches=[4],
             items=[CustomButton(name, "top_btns", "indv", parent=self, img=img, secondary_img=img_2, desc=desc, width=100)
                     for name, img, img_2, desc in graph_btns]   )
@@ -107,7 +112,7 @@ class MainWindow(QMainWindow):
 
         # Create confirmation and redo buttons
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50); confirmations_layout.setContentsMargins(20,20,20,20)
-        for name, img in [("reroll_btn", "img_src/reroll_icon_scaled.png"), ("confirm_pd_btn", "img_src/confirm_icon_scaled.png")]:
+        for name, img in [("reroll_btn", abs_file("reroll_icon_scaled.png")), ("confirm_pd_btn", abs_file("confirm_icon_scaled.png"))]:
             confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv", parent=self, img=img, width=70, height=70))
 
         # Add all prediction setting layouts to prediction settings container

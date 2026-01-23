@@ -2,9 +2,12 @@
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/Iteration 4. Profile work" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/Iteration 4. Profile work/scripts" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/Iteration 4. Profile work/stock_cache" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.13 (NEA_I4)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.13" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

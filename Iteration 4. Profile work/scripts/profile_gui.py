@@ -1,14 +1,12 @@
 
 import io
-import os
 import sys
 import json
-import pandas as pd
 import matplotlib.pyplot as plt
 plt.ioff()
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QCursor, QImage
+from PyQt6.QtGui import QPixmap, QCursor, QImage
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog, QFileDialog,
                              QWidget, QLabel, QFrame,  QDialog, QMenu, QLineEdit, QScrollArea)
 
@@ -16,165 +14,172 @@ from profile import Profile
 from load_data import peek_data, validate_ticker
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 
+# To find the absolute path of image files
+import os
+from scripts.config import IMG_DIR, ICON_DIR
+def abs_file(file): return str(os.path.join(IMG_DIR, file))
+
 ############################################################################
 
 class ProfileWindow(QDialog):
     def __init__(self, parent_window: QMainWindow, profile_obj: Profile):
-        # Initialize the main window
+        # Initialize the main window and dictionaries for button groups
         super().__init__(parent_window)
+        self.setWindowTitle(f"Profile Management - {profile_obj.get_username()}")
+        self.setGeometry(100, 100, 1500, 900)
         self.parent_window = parent_window
         self.logged_profile = profile_obj
-        self.setWindowTitle(f"Profile Management - {self.logged_profile.get_username()}")
-        self.setGeometry(100, 100, 1500, 900)
         self.btns = {"profile_btns": [], "Na": []}
 
         # Switch back to main window when closed
         self.finished.connect(self.show_parent_on_close)
 
-        # Set up main layout with left and right frames
+        # Set up the main layout and save to dict for reframing later
         self.main_layout = QVBoxLayout(self)
         self.main_frames = {"top": [self.build_top_frame(), 1], "bottom": [self.build_bottom_frame(), 2]}
         for frame_info in self.main_frames.values(): self.main_layout.addWidget(frame_info[0], frame_info[1])
 
+    # Initialize the top frame with profile settings and preferences
     def build_top_frame(self) -> QFrame:
-        # Initialize the top frame with profile settings and preferences
+        # Main frame styling
         top_frame = QFrame(); top_layout = QHBoxLayout(top_frame); top_layout.setContentsMargins(75, 5, 5, 20)
 
-        ## Define profile widget, username and add to a container layout
+        # Create profile widget and username label, and add to a container layout
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;"); profile_frame_layout = QVBoxLayout(profile_frame)
         profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         add_to_layout(profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
                       items=[create_circle_label(self, clickable=True, diameter=120, desc="Click to select a profile image"), QLabel(self.logged_profile.get_username())])
 
-        ## Define profile and preferences settings
+        # Settings frame styling
         setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black"); setting_frame.setFixedHeight(200)
         setting_layout = QVBoxLayout(setting_frame); setting_layout.setContentsMargins(0,0,0,0); setting_layout.setSpacing(10)
 
-        # Edit profile settings
+        # Create edit profile buttons
         edit_frame = QFrame(); edit_frame.setStyleSheet("border: 1px solid black")
         edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(0,0,0,0); edit_layout.setSpacing(0)
 
-        edit_btns = [("logout_btn", "img_src/logout.png"), ("change_profile_btn", "img_src/change_profile_icon.png"),
-                     ("export_data_btn", "img_src/export_data.png"), ("import_data_btn", "img_src/import_data.png"),
-                     ("delete_profile_btn", "img_src/delete.png")]
+        edit_btns = [("logout_btn", abs_file("logout.png")), ("change_profile_btn", abs_file("change_profile_icon.png")),
+                     ("export_data_btn", abs_file("export_data.png")), ("import_data_btn", abs_file("import_data.png")),
+                     ("delete_profile_btn", abs_file("delete.png"))]
+
+        # Add widget and layouts to correct outer layouts
         add_to_layout(edit_layout, [CustomButton(name, "profile_btns", "indv", parent=self, img=img) for name, img in edit_btns])
         add_to_layout(setting_layout, [edit_frame, create_slider_layout(self)])
-
-        # Add profile settings and preferences to top frame
         add_to_layout(top_layout, [profile_frame, setting_frame], stretches=[1,-1])
         return top_frame
 
+    # Initialize bottom frame with saved stocks overviews
     def build_bottom_frame(self) -> QFrame:
+        # Main frame styling
         bottom_frame = QFrame(); bottom_layout = QHBoxLayout(bottom_frame)
         bottom_layout.setContentsMargins(10, 10, 10, 10); bottom_layout.setSpacing(15)
 
+        ## Left compact frame styling
         left_frame = QFrame(); left_frame.setFixedWidth(250); left_frame.setStyleSheet("border: 1px solid black")
         left_layout = QVBoxLayout(left_frame); left_layout.setContentsMargins(0,0,0,0); left_layout.setSpacing(3)
 
         compound_stocks_widget = QScrollArea(); compound_stocks_widget.setWidgetResizable(True); compound_stocks_widget.setStyleSheet("border: none")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
+        # Create a widget with ticker and percent change for every saved stock
         saved_tickers = self.get_profile_data().get("data", {}).get("Saved stocks", [])
         for index, ticker in enumerate(saved_tickers):
+            # Find latest day of data
             data = peek_data(ticker, 1)
             if data is None: continue
 
-            last_price = data.iloc[0]['Close']
-            now_price = data.iloc[-1]['Close']
+            # Get price change
+            last_price, now_price = data.iloc[0]['Close'], data.iloc[-1]['Close']
             price_change = round(abs((now_price - last_price) / last_price) * 100, 2)
 
+            # Frame for the row styling
             row_frame = QFrame(); row_frame.setFixedHeight(40); row_frame.setStyleSheet("border: 1px solid gray; padding: 5px")
             row_layout = QHBoxLayout(row_frame); row_layout.setContentsMargins(10,0,10,0)
 
+            # Create label for ticker
             ticker_label = QLabel(ticker); ticker_label.setStyleSheet("border: none; font-weight: bold")
             percent_label = QLabel(f"{'+' if last_price < now_price else '-'}{price_change}%")
             percent_label.setStyleSheet(f"border: none; color: {'#008000' if last_price < now_price else '#FF0000'}")
 
+            # Add widget to the row and set function call on click
             add_to_layout(row_layout, [ticker_label, percent_label], stretches=[1])
             row_frame.setCursor(Qt.CursorShape.PointingHandCursor)
             row_frame.mousePressEvent = lambda event, t=ticker, i=index: self.show_stock_menu(t, i)
 
             scroll_layout.addWidget(row_frame)
+        # Add row container to main left layout
+        compound_stocks_widget.setWidget(scroll_widget); left_layout.addWidget(compound_stocks_widget)
 
-        compound_stocks_widget.setWidget(scroll_widget)
-        left_layout.addWidget(compound_stocks_widget)
-
-
+        ## Right detailed frame styling
         right_frame = QFrame(); right_layout = QVBoxLayout(right_frame); right_layout.setContentsMargins(0, 0, 0, 0)
 
+        # Create search bar and button to submit search
         search_layout = QHBoxLayout()
-
         self.search_input = QLineEdit(); self.search_input.setPlaceholderText("Search for a stock...")
         self.search_input.setFixedHeight(40); self.search_input.setStyleSheet("border: 1px solid black; padding-left: 10px;")
 
-        confirm_btn = CustomButton("search_confirm_btn", "Na", "indv", parent=self, img="img_src/confirm_icon_scaled.png", width=60, height=40)
+        confirm_btn = CustomButton("search_confirm_btn", "Na", "indv", parent=self, img=abs_file("confirm_icon_scaled.png"), width=60, height=40)
         confirm_btn.setProperty("BorderBlank", "true"); confirm_btn.style().unpolish(confirm_btn); confirm_btn.style().polish(confirm_btn)
-        
         add_to_layout(search_layout, [self.search_input, confirm_btn])
 
-
+        # Container for rows of detailed info
         scroll_container = QFrame(); scroll_container.setStyleSheet("border: 1px solid black")
         scroll_container_layout = QVBoxLayout(scroll_container); scroll_container_layout.setContentsMargins(0, 0, 0, 0)
 
         detailed_stocks_widget = QScrollArea(); detailed_stocks_widget.setWidgetResizable(True); detailed_stocks_widget.setStyleSheet("border: None")
         scroll_widget = QWidget(); scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
+        # Iterate through every saved ticker and add detailed row to scroll container
         for index, ticker in enumerate(saved_tickers): scroll_layout.addWidget(self.create_stock_card(ticker, index))
-
         detailed_stocks_widget.setWidget(scroll_widget); scroll_container_layout.addWidget(detailed_stocks_widget)
 
+        # Add to layout and return whole frame
         add_to_layout(right_layout, [search_layout, scroll_container])
         add_to_layout(bottom_layout, [left_frame, right_frame])
         return bottom_frame
 
-    # Creates a detailed stock row widget
+    # Helper function to create the detailed stock card
     def create_stock_card(self, ticker: str, index: int) -> QFrame:
+        # Find latest 30 days of data
         df = peek_data(ticker, 30, "1d")
         if df is None: return
 
+        # Get price change
         last_price, now_price = df.iloc[0]['Close'], df.iloc[-1]['Close']
         price_change = round(abs((now_price - last_price) / last_price) * 100, 2)
 
+        # Frame for the row styling
         card = QFrame(); card.setFixedHeight(120); card.setStyleSheet("border: 2px solid black; margin-bottom: 5px; background-color: white;")
         layout = QHBoxLayout(card)
 
-        ticker_label = QLabel(ticker); ticker_label.setStyleSheet("font-size: 24px; font-weight: bold; border: none;"); ticker_label.setFixedWidth(120)
-
-
-        # Use a QLabel to hold the image
-        chart_area = QLabel()
-        chart_area.setStyleSheet("border: 1px solid gray; background-color: #f9f9f9;")
-
-        fig, ax = plt.subplots(figsize=(4, 0.8), dpi=100)
-        ax.margins(x=0, y=0.05)
+        # Create a graph of latest data
+        fig, ax = plt.subplots(figsize=(4, 0.8), dpi=100); ax.margins(x=0, y=0.05)
         ax.plot(df.index, df['Close'], color=('#008000' if now_price >= last_price else '#FF0000'), linewidth=2)
 
         # Make graph "Invisible" (Hide all axes/borders)
-        ax.axis('off')
-        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
-        fig.patch.set_visible(False)  # Transparent background
+        ax.axis('off'); fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        fig.patch.set_visible(False)
 
-        # Save graph to RAM instead of Disk
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', transparent=True)
-        buf.seek(0)
-        plt.close(fig) # Clean up memory immediately
+        # Save graph to RAM instead of Disk and clean up memory immediately
+        buf = io.BytesIO(); fig.savefig(buf, format='png', transparent=True)
+        buf.seek(0); plt.close(fig)
 
-        # Convert graph image to QPixmap
-        image = QImage.fromData(buf.getvalue())
-        pixmap = QPixmap.fromImage(image)
-
-        chart_area.setPixmap(pixmap)
-        chart_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Convert graph image to QPixmap and set it to a label
+        chart_area = QLabel(); chart_area.setStyleSheet("border: 1px solid gray; background-color: #f9f9f9;")
+        image = QImage.fromData(buf.getvalue()); pixmap = QPixmap.fromImage(image)
+        chart_area.setPixmap(pixmap); chart_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
         chart_area.setScaledContents(True)
 
-
+        # Create percentage change label
         percent_label = QLabel(f"{'+' if last_price < now_price else '-'}{price_change}%")
         percent_label.setStyleSheet(f"font-size: 18px; border: none; color: {'#008000' if last_price < now_price else '#FF0000'}")
-        percent_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        percent_label.setFixedWidth(120)
+        percent_label.setAlignment(Qt.AlignmentFlag.AlignCenter); percent_label.setFixedWidth(120)
 
+        # Create ticker label and add all parts to main layout
+        ticker_label = QLabel(ticker); ticker_label.setStyleSheet("font-size: 24px; font-weight: bold; border: none;"); ticker_label.setFixedWidth(120)
         add_to_layout(layout, [ticker_label, chart_area, percent_label], size_ratios=[0,1,0])
+
+        # Set main styling and function to call on click
         card.setCursor(Qt.CursorShape.PointingHandCursor)
         card.mousePressEvent = lambda event, t=ticker, i=index: self.show_stock_menu(t, i)
         return card
@@ -321,7 +326,7 @@ class ProfileWindow(QDialog):
         if file_path:
             try:
                 _, ext = os.path.splitext(file_path)
-                dest_path = os.path.join("profile_images", f"{self.logged_profile.get_username()}{ext.lower()}")
+                dest_path = os.path.join(ICON_DIR, f"{self.logged_profile.get_username()}{ext.lower()}")
                 if os.path.exists(dest_path): os.remove(dest_path)
 
                 img = QPixmap(file_path).scaled(70,70)

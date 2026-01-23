@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
         add_to_layout(right_layout, [profile_frame, self.pd_set_frame, prediction_result_frame], size_ratios=[1,10,10])
         return right_frame
 
-    # Helper function to rebuild a select main frame to update the widgets within
+    # Helper function to rebuild a select main frame
     def rebuild_frame(self, frame_pos: str) -> None:
         # Get old values and delete the old frame object
         old, stretch = self.main_frames.get(frame_pos)
@@ -158,11 +158,9 @@ class MainWindow(QMainWindow):
 
     # Helper function to show login prompt if not logged in
     def login_window(self) -> None:
-        # Get username input
+        # Get username and password input
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
         if not ok: return
-
-        # Get password input
         password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:", QLineEdit.EchoMode.Password)
         if not ok: return
 

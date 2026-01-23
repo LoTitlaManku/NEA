@@ -138,7 +138,7 @@ class ProfileWindow(QDialog):
         add_to_layout(bottom_layout, [left_frame, right_frame])
         return bottom_frame
 
-    # Helper function to create the detailed stock card
+    # Helper function to create a detailed stock card
     def create_stock_card(self, ticker: str, index: int) -> QFrame:
         # Find latest 30 days of data
         df = peek_data(ticker, 30, "1d")
@@ -184,14 +184,26 @@ class ProfileWindow(QDialog):
         card.mousePressEvent = lambda event, t=ticker, i=index: self.show_stock_menu(t, i)
         return card
 
+    # Helper function to rebuild a select main frame
+    def rebuild_frame(self, frame_pos: str) -> None:
+        # Get old values and delete the old frame object
+        old, stretch = self.main_frames.get(frame_pos)
+        index = self.main_layout.indexOf(old)
+        self.main_layout.removeWidget(old); old.setParent(None); old.deleteLater()
+
+        # Create new frame and insert back into the correct place
+        new = getattr(self, f"build_{frame_pos}_frame")()
+        self.main_frames.update({frame_pos: [new, stretch]})
+        self.main_layout.insertWidget(index, new, stretch)
+
+    # Helper function to retrieve the logged in profile's data and username
     def get_profile_data(self) -> dict:
         if self.logged_profile is None: return {}
         else: return {"username": self.logged_profile.get_username(), "data": self.logged_profile.get_data()}
 
-    def label_click(self): self.choose_profile_icon()
-
-    # Displays a floating menu to move or delete a stock
+    # Displays a menu to move or delete a stock
     def show_stock_menu(self, ticker: str, current_index: int) -> None:
+        # Menu styling
         menu = QMenu(self); menu.setStyleSheet("QMenu {border: 1px solid black; padding: 5px}")
         move_up = menu.addAction("Move Up"); move_down = menu.addAction("Move Down"); delete_stock = menu.addAction("Delete from Saved")
 
@@ -199,123 +211,132 @@ class ProfileWindow(QDialog):
         if current_index == 0: move_up.setEnabled(False)
         if current_index == len(self.get_profile_data().get("data", {}).get("Saved stocks", [])) - 1: move_down.setEnabled(False)
 
-        # Show menu at the current mouse position
+        # Call correct helper function
         action = menu.exec(QCursor().pos())
         if action == move_up: self.reorder_stock(current_index, current_index - 1)
         elif action == move_down: self.reorder_stock(current_index, current_index + 1)
         elif action == delete_stock: self.remove_stock(ticker)
 
-    # Swaps stock positions in the list and refreshes UI
+    # Helper function to swap stock positions in the list
     def reorder_stock(self, old_idx: int, new_idx: int) -> None:
         stocks = self.get_profile_data().get("data", {}).get("Saved stocks", [])
         stocks[old_idx], stocks[new_idx] = stocks[new_idx], stocks[old_idx]
         self.logged_profile.update_data({"Saved stocks": stocks})
         self.rebuild_frame("bottom")
 
-    # Removes a stock from profile data and refreshes UI
+    # Helper function to remove a stock from the list
     def remove_stock(self, ticker: str) -> None:
         current_data = self.get_profile_data().get("data", {})
         current_data["Saved stocks"] = [s for s in current_data.get("Saved stocks", []) if s != ticker]
         self.logged_profile.update_data(current_data)
         self.rebuild_frame("bottom")
 
-    # Adds a stock to profile data and refreshes UI
-    def add_stock(self):
+    # Helper function to add a stock to list
+    def add_stock(self) -> None:
+        # Validation on input
         if not self.search_input.text(): return
         ticker = self.search_input.text().upper()
         if not validate_ticker(ticker): QMessageBox.critical(self, "Failed", "Invalid ticker."); return
+
+        # Add to the front of the list
         current_data = self.get_profile_data().get("data", {}).get("Saved stocks", [])
         current_data.insert(0, ticker)
         self.logged_profile.update_data({"Saved stocks": current_data})
         self.rebuild_frame("bottom")
 
-    # Refreshes window to update information
-    def rebuild_frame(self, frame_pos: str) -> None:
-        old, stretch = self.main_frames.get(frame_pos)
-        index = self.main_layout.indexOf(old)
-        self.main_layout.removeWidget(old); old.setParent(None)
-        old.deleteLater()
-
-        new = getattr(self, f"build_{frame_pos}_frame")()
-        self.main_frames.update({frame_pos: [new, stretch]})
-        self.main_layout.insertWidget(index, new, stretch)
-
-    def logout(self):
+    # Helper function to log out of profile and return to main menu
+    def logout(self) -> None:
         self.parent_window.logged_profile = None; self.parent_window.logged_in = False
         self.parent_window.status_label.setText(f"Not logged in")
         self.parent_window.rebuild_frame("right")
         QMessageBox.information(self, "Success", "Logged out.")
         self.accept()
 
-    def change_profile(self):
+    # Helper function to change logged in profile
+    def change_profile(self) -> None:
+        # Get username and password input
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
-        if not ok or not username: return
-
+        if not ok: return
         password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:", QLineEdit.EchoMode.Password)
         if not ok: return
 
         result = self.parent_window.data_manager.get_profile(username, password)
+        # Change logged in profile upon success, and rebuild right frame to update with user information
         if isinstance(result, Profile):
             self.parent_window.logged_profile = result
-            self.parent_window.status_label.setText(f"Status: Logged In as {username}")
             self.parent_window.rebuild_frame("right")
-            QMessageBox.information(self, "Success", "Profile changed."); self.accept()
-
+            self.parent_window.status_label.setText(f"Status: Logged In as {username}")
+            QMessageBox.information(self, "Success", f"Welcome, {username}!")
+        # Display error to user upon failure
         elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist. Go back to main menu to create new.")
         elif result == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}") # Catch all other DataManager string error results
 
-    def delete_profile(self):
+    # Helper function to delete a profile
+    def delete_profile(self) -> None:
+        # Get password input
         password, ok = QInputDialog.getText(self, "Security check", f"Enter Password for {self.logged_profile.get_username()}:", QLineEdit.EchoMode.Password)
         if not ok: return
 
-        confirmation = QMessageBox.question(self, "Confirm Action", "Are you sure you want to proceed?",
+        # Give second confirmation to user
+        confirmation = QMessageBox.question(self, "Confirm Action", "Are you sure you want to proceed? All data will be permanently lost",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         if confirmation != QMessageBox.StandardButton.Yes: return
 
         success = self.parent_window.data_manager.delete_profile(self.logged_profile, password)
+        # Delete user data and logout of windows upon success
         if success is True:
-            self.parent_window.logged_profile = None; self.parent_window.logged_in = False
+            self.parent.logged_in = False; self.parent.logged_profile = None
+            self.parent_window.rebuild_frame("right")
             self.parent_window.status_label.setText(f"Not logged in")
             QMessageBox.information(self, "Success", "Profile deleted.")
             self.accept()
+        # Display error to user upon failure
         elif success == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
         else: QMessageBox.critical(self, "Error", f"Failed to delete data.")
 
-    def export_profile(self):
+    # Helper function to export user data
+    def export_profile(self) -> None:
         # Open the "Save As" Dialog
         file_path, _ = QFileDialog.getSaveFileName(self, "Export Profile Data",
             "profile_export.json",  # Default filename
             "JSON Files (*.json);;All Files (*)") # File filters
 
         # Ensure user selected a path (didn't click "Cancel")
-        if file_path:
-            try:
-                data_to_export = self.get_profile_data().get("data", {})
-                with open(file_path, "w") as f: json.dump(data_to_export, f, indent=4)
+        if not file_path: return
+        try:
+            # Export data to chosen path
+            data_to_export = self.get_profile_data().get("data", {})
+            with open(file_path, "w") as f: json.dump(data_to_export, f, indent=4)
+            QMessageBox.information(self, "Success", f"Data exported to {file_path}")
+        # Display error on failure
+        except PermissionError: QMessageBox.critical(self, "Export Error", "Missing permissions.")
+        except OSError: QMessageBox.critical(self, "Export Error", f"Failed to export data. Disk may be full or file is locked by another process.")
+        except Exception as e: QMessageBox.critical(self, "Export Error", f"Could not save file: {e}")
 
-                QMessageBox.information(self, "Success", f"Data exported to {file_path}")
-            except Exception as e: QMessageBox.critical(self, "Export Error", f"Could not save file: {e}")
-
-    def import_profile(self):
+    # Helper function to import data from a json
+    def import_profile(self) -> None:
         # Open the "Open File" Dialog
         file_path, _ = QFileDialog.getOpenFileName(self, "Import Profile Data",
             "",  # Default directory
             "JSON Files (*.json);;All Files (*)") # File filters
 
         # Ensure user selected a path (didn't click "Cancel")
-        if file_path:
-            try:
-                with open(file_path, "r") as f: imported_data = json.load(f)
+        if not file_path: return
+        try:
+            # Import data and update profile
+            with open(file_path, "r") as f: imported_data = json.load(f)
+            self.logged_profile.update_data(imported_data)
+            QMessageBox.information(self, "Success", "Profile data imported and saved successfully.")
+            self.accept()
+        # Display error on failure
+        except json.JSONDecodeError: QMessageBox.critical(self, "Import Error", "The file is not a valid JSON file.")
+        except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 
-                # Update the profile data.
-                self.logged_profile.update_data(imported_data)
-                QMessageBox.information(self, "Success", "Profile data imported and saved successfully.")
-                self.accept()
+    # Helper function on profile label click to call correct function
+    def label_click(self): self.choose_profile_icon()
 
-            except json.JSONDecodeError: QMessageBox.critical(self, "Import Error", "The file is not a valid JSON file.")
-            except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
-
+    # Helper function to select a profile icon
     def choose_profile_icon(self):
         # Open the "Open File" Dialog
         file_path, _ = QFileDialog.getOpenFileName(self, "Choose pofile icon.",
@@ -323,20 +344,21 @@ class ProfileWindow(QDialog):
             "Image Files (*.png *.jpg *.jpeg);;All Files (*)") # File filters
 
         # Ensure user selected a path (didn't click "Cancel")
-        if file_path:
-            try:
-                _, ext = os.path.splitext(file_path)
-                dest_path = os.path.join(ICON_DIR, f"{self.logged_profile.get_username()}{ext.lower()}")
-                if os.path.exists(dest_path): os.remove(dest_path)
+        if not file_path: return
+        try:
+            # Get path of image and ensure another icon file doesn't already exist for that user
+            _, ext = os.path.splitext(file_path)
+            dest_path = os.path.join(ICON_DIR, f"{self.logged_profile.get_username()}{ext.lower()}")
+            if os.path.exists(dest_path): os.remove(dest_path)
 
-                img = QPixmap(file_path).scaled(70,70)
-                img.save(dest_path)
-                self.rebuild_frame("top")
-                QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
+            # Save a scaled version of the image in the correct path and return
+            img = QPixmap(file_path).scaled(70,70); img.save(dest_path)
+            self.rebuild_frame("top")
+            QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
+        # Display error on failure
+        except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 
-            except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
-
-    # Called when the window is closed
+    # Show parent when window is closed and update profile if needed
     def show_parent_on_close(self):
         if self.risk_slider.value() != self.logged_profile.get_data().get("Risk tolerance"):
             self.logged_profile.update_data({"Risk tolerance": self.risk_slider.value()})

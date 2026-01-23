@@ -12,7 +12,7 @@ from custom_widgets import CustomButton, create_slider_layout, create_circle_lab
 # To find the absolute path of image files
 import os
 from scripts.config import IMG_DIR
-def abs_file(file): return str(os.path.join(IMG_DIR, file))
+def abs_file(file: str) -> str: return os.path.join(IMG_DIR, file).replace("\\", "/")
 
 ############################################################################
 
@@ -165,7 +165,7 @@ class MainWindow(QMainWindow):
         if not ok: return
 
         # Ensure username and password meet length requirements and username does not contain illegal characters
-        if not all(6 <= len(w) <= 64 for w in [username, password]) and not all(c for c in username if c.isalnum() or c in [" ", "_"]):
+        if not all(6 <= len(w) <= 64 for w in [username, password]) or not all(c for c in username if c.isalnum() or c in [" ", "_"]):
             QMessageBox.critical(self, "Error", "Username or password is too short or username contains an illegal character."); return
 
         result = self.data_manager.get_profile(username, password)

@@ -36,8 +36,8 @@ class Profile:
 class DataManager:
     def __init__(self):
         self.__master_key = b"pCt-V4cMUKFvqrWFTD6YjoaXmioK20H3zHzXn1dfd_o="
-        self.__key_file = os.path.join(DATA_DIR, "keys.dat")
-        self.__data_file = os.path.join(DATA_DIR, "data.dat")
+        self.__key_file = os.path.join(DATA_DIR, "keys.dat").replace("\\", "/")
+        self.__data_file = os.path.join(DATA_DIR, "data.dat").replace("\\", "/")
 
         # Ensure key and data files exist, if not create them
         if not os.path.exists(self.__key_file): self.save_encrypt_file(self.__key_file, {}, self.__master_key)
@@ -49,7 +49,8 @@ class DataManager:
         with open(self.__data_file, "r") as f: self.__profile_datas = json.load(f)
 
     # Helper function to load a file and decrypt it with the key
-    def load_decrypt_file(self, filename: str, key: bytes) -> dict:
+    @staticmethod
+    def load_decrypt_file(filename: str, key: bytes) -> dict:
         fernet = Fernet(key)
         with open(filename, "rb") as f: encrypted_data = f.read()
 
@@ -57,7 +58,8 @@ class DataManager:
         return json.loads(decrypted_data.decode())
 
     # Helper function to save a file encrypted with the key
-    def save_encrypt_file(self, filename: str, data: dict, key: bytes) -> None:
+    @staticmethod
+    def save_encrypt_file(filename: str, data: dict, key: bytes) -> None:
         fernet = Fernet(key)
         json_data = json.dumps(data).encode()
 
@@ -81,7 +83,7 @@ class DataManager:
         target_data = json.loads(target_data.decode())  # convert back into dict
 
         # Ensure the entered password was correct
-        if target_data["password"] != password: return "Incorrect password"
+        if target_data.get("password", "") != password: return "Incorrect password"
         return Profile(self, username, target_key, target_data)
 
     # Create a new profile for the given username and password
@@ -134,8 +136,8 @@ class DataManager:
 
 if __name__ in "__main__":
     manage = DataManager()
-    manage.create_profile("/", "/")
-    pro = manage.get_profile("/", "/")
+    # manage.create_profile("/", "/")
+    pro = manage.get_profile("pppppp", "pppppp")
     if pro == "Non-existent profile":
         print("Profile data is non-existent")
     elif pro == "Incorrect password":
@@ -144,8 +146,9 @@ if __name__ in "__main__":
         print(pro.get_data())
         print(pro.get_username())
 
-    pr = manage.get_profile("/", "/")
-    pr.update_data({"Risk tolerance": 3})
-    print(pr.get_data())
-    print(pr.get_data()["Risk tolerance"])
+    # pr = manage.get_profile("/", "/")
+    # pr.update_data({"Risk tolerance": 3})
+    # print(pr.get_data())
+    # print(pr.get_data()["Risk tolerance"])
+    print("success")
 

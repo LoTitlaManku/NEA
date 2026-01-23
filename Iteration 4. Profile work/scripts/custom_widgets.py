@@ -138,9 +138,10 @@ class ClickableLabel(QLabel):
 def create_circle_label(parent: MainWindow | ProfileWindow,
                         clickable: bool = False, diameter: int = 100, desc: str = None, border: bool = True) -> QLabel:
     # Get icon file and create a pixmap from it
-    base = os.path.join(ICON_DIR, parent.get_profile_data().get("username", "person_icon"))
-    pixmap = QPixmap(next((base + ext for ext in [".png", ".jpg", ".jpeg"] if os.path.exists(base + ext))))
-    if pixmap.isNull(): pixmap = QPixmap(os.path.join(ICON_DIR, "person_icon.jpg"))
+    base = os.path.join(ICON_DIR, parent.get_profile_data().get("username", "person_icon")).replace("\\", "/")
+    pixmap = QPixmap(next((base + ext for ext in [".png", ".jpg", ".jpeg"] if os.path.exists(base + ext)),
+                          os.path.join(ICON_DIR, "person_icon.jpg").replace("\\", "/")))
+    if pixmap.isNull(): pixmap = QPixmap(os.path.join(ICON_DIR, "person_icon.jpg").replace("\\", "/"))
 
     # Scale pixmap and setup painter
     pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)

@@ -17,7 +17,7 @@ from custom_widgets import CustomButton, create_slider_layout, create_circle_lab
 # To find the absolute path of image files
 import os
 from scripts.config import IMG_DIR, ICON_DIR
-def abs_file(file): return str(os.path.join(IMG_DIR, file))
+def abs_file(file): return str(os.path.join(IMG_DIR, file)).replace("\\", "/")
 
 ############################################################################
 
@@ -348,7 +348,7 @@ class ProfileWindow(QDialog):
         try:
             # Get path of image and ensure another icon file doesn't already exist for that user
             _, ext = os.path.splitext(file_path)
-            dest_path = os.path.join(ICON_DIR, f"{self.logged_profile.get_username()}{ext.lower()}")
+            dest_path = os.path.join(ICON_DIR, f"{self.logged_profile.get_username()}{ext.lower()}").replace("\\", "/")
             if os.path.exists(dest_path): os.remove(dest_path)
 
             # Save a scaled version of the image in the correct path and return

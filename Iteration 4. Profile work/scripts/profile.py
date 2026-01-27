@@ -93,7 +93,8 @@ class DataManager:
 
         # Generate a new encryption key for that profile and encrypt empty data for it
         new_key = Fernet.generate_key(); fernet = Fernet(new_key)
-        data = fernet.encrypt(json.dumps({"password": password, "Saved stocks": [], "Risk tolerance": 5}).encode()).decode("utf-8")
+        data = fernet.encrypt(json.dumps({"password": password, "Saved stocks": [],
+                                          "Risk tolerance": 5}).encode()).decode("utf-8")
         self.__profile_datas[username] = data
         with open(self.__data_file, "w") as f: json.dump(self.__profile_datas, f)
 

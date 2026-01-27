@@ -20,7 +20,8 @@ if TYPE_CHECKING:
 # Class for custom button attributes and behaviour
 class CustomButton(QPushButton):
     def __init__(self, name: str, group: str, btn_type: str, parent: MainWindow | ProfileWindow,
-                 text: str = None, img: str = None, secondary_img: str = None, desc: str = None, width: int = None, height: int = None, *args, **kwargs):
+                 text: str = None, img: str = None, secondary_img: str = None, desc: str = None,
+                 width: int = None, height: int = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Define basic attributes
@@ -75,20 +76,25 @@ class CustomButton(QPushButton):
     # Initialize basic button styling
     def init_appearance(self) -> None:
         # Find correct css code depending on what type of button it is
-        img_css = f"background-image: url('{self.img}'); background-repeat: no-repeat; background-position: center;" if self.img else ""
+        img_css = f"""background-image: url('{self.img}'); background-repeat: no-repeat;
+        			  background-position: center;""" if self.img else ""
         press_css = "background-color: #858585;" if (self.btn_type == "indv" and not self.img_2) else ""
-        second_img_css = f"background-image: url('{self.img_2 if self.img_2 else self.img}'); background-repeat: no-repeat; background-position: center;" if self.img_2 else ""
+        second_img_css = (f"""background-image: url('{self.img_2 if self.img_2 else self.img}');
+        				     background-repeat: no-repeat; background-position: center;"""
+        				 if self.img_2 else "")
 
         # Add css to button style
         self.setStyleSheet(f"""
-                QPushButton {{ {img_css} background-color: #e3e3e3; border: none; font-size: 13px; font-family: Aller display}}
+                QPushButton {{ {img_css} background-color: #e3e3e3; border: none; font-size: 13px; 
+                			   font-family: Aller display}}
                 QPushButton:hover {{background-color: #adadad}}
                 QPushButton:pressed {{ {press_css} }} 
 
                 QPushButton:checked {{ {second_img_css} background-color: #e3e3e3}} 
                 QPushButton:checked:hover {{background-color: #adadad}}
 
-                QPushButton[BorderBlank="true"] {{ {img_css} background-color: #ffffff; border: 1px solid black}}
+                QPushButton[BorderBlank="true"] {{ {img_css} background-color: #ffffff; 
+                								   border: 1px solid black}}
                 QPushButton[BorderBlank="true"]:hover {{background-color: #adadad}}
                 QPushButton[BorderBlank="true"]:pressed {{background-color: #858585}}
     """)
@@ -96,10 +102,12 @@ class CustomButton(QPushButton):
     # Helper function to update button's appearance when checked
     def update_appearance(self, is_active: bool) -> None:
         bg = "#8a8a8a" if is_active else "#e3e3e3"
-        img_css = f"background-image: url('{self.img}'); background-repeat: no-repeat; background-position: center;" if self.img else ""
+        img_css = f"""background-image: url('{self.img}'); background-repeat: no-repeat;
+        			  background-position: center;""" if self.img else ""
 
         self.setStyleSheet(f"""
-            QPushButton {{ {img_css} background-color: {bg}; border: none; font-size: 13px; font-family: Aller display}}
+            QPushButton {{ {img_css} background-color: {bg}; border: none; font-size: 13px;
+            			   font-family: Aller display}}
             QPushButton:hover {{ {"" if is_active else "background-color: #adadad"} }} """)
 
 ############################################################################
@@ -110,15 +118,22 @@ def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
 
     # Create slider and label for value selected
     current_tolerance = parent.get_profile_data().get("data", {}).get("Risk tolerance", 4)
-    risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}"""); risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1); risk_slider.setSingleStep(1); risk_slider.setValue(current_tolerance)
-    risk_slider.valueChanged.connect(lambda v: risk_value_label.setText(f"Risk tolerance: {v} {'(Current)' if v == current_tolerance else ('(Recommended)' if v == 4 else '')}"))
+    risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}""")
+    risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1)
+    risk_slider.setSingleStep(1); risk_slider.setValue(current_tolerance)
+    risk_slider.valueChanged.connect(
+        lambda v: risk_value_label.setText(f"Risk tolerance: {v} {'(Current)' if v == current_tolerance else 
+															     ('(Recommended)' if v == 4 else '')}"))
 
     # Create labels for slider axis
-    risk_value_label = QLabel(f"Risk tolerance: {current_tolerance} (Current)"); risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    risk_value_label = QLabel(f"Risk tolerance: {current_tolerance} (Current)")
+    risk_value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     risk_value_label.setStyleSheet("border: none; font-size: 13px; font-family: Aller Display")
     number_layout = QHBoxLayout()
-    for i in range(1, 11): nlabel = QLabel(str(i)); nlabel.setAlignment(Qt.AlignmentFlag.AlignCenter); nlabel.setStyleSheet("border: none"); number_layout.addWidget(nlabel)
+    for i in range(1, 11):
+        nlabel = QLabel(str(i)); nlabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        nlabel.setStyleSheet("border: none"); number_layout.addWidget(nlabel)
 
     # Add all layouts and widgets to main layout
     add_to_layout(risk_layout, [risk_value_label, risk_slider, number_layout])
@@ -136,7 +151,8 @@ class ClickableLabel(QLabel):
 
 # Helper function to create a circular label for profile icon
 def create_circle_label(parent: MainWindow | ProfileWindow,
-                        clickable: bool = False, diameter: int = 100, desc: str = None, border: bool = True) -> QLabel:
+                        clickable: bool = False, diameter: int = 100, desc: str = None,
+                        border: bool = True) -> QLabel:
     # Get icon file and create a pixmap from it
     base = os.path.join(ICON_DIR, parent.get_profile_data().get("username", "person_icon")).replace("\\", "/")
     pixmap = QPixmap(next((base + ext for ext in [".png", ".jpg", ".jpeg"] if os.path.exists(base + ext)),
@@ -144,7 +160,8 @@ def create_circle_label(parent: MainWindow | ProfileWindow,
     if pixmap.isNull(): pixmap = QPixmap(os.path.join(ICON_DIR, "person_icon.jpg").replace("\\", "/"))
 
     # Scale pixmap and setup painter
-    pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+    pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                           Qt.TransformationMode.SmoothTransformation)
     mask = QPixmap(diameter, diameter); mask.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(mask)
@@ -160,7 +177,8 @@ def create_circle_label(parent: MainWindow | ProfileWindow,
 
     # Make it clickable if needed
     if clickable:
-        label = ClickableLabel(); label.clicked.connect(parent.label_click); label.setCursor(Qt.CursorShape.PointingHandCursor)
+        label = ClickableLabel(); label.clicked.connect(parent.label_click)
+        label.setCursor(Qt.CursorShape.PointingHandCursor)
     else: label = QLabel()
 
     if desc: label.setToolTip(desc)
@@ -173,7 +191,8 @@ def create_circle_label(parent: MainWindow | ProfileWindow,
 
 # Helper function to add a list of layouts and widgets to a main layout
 def add_to_layout(layout: QHBoxLayout | QVBoxLayout, items: list[QWidget | QLayout],
-                  size_ratios: list[int] = None, stretches: list[int] = None, alignment: Qt.AlignmentFlag = Qt.AlignmentFlag(0)) -> None:
+                  size_ratios: list[int] = None, stretches: list[int] = None,
+                  alignment: Qt.AlignmentFlag = Qt.AlignmentFlag(0)    ) -> None:
     # Fallback parameters
     if stretches is None: stretches = []
     if size_ratios is None: size_ratios = [0] * len(items)

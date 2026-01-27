@@ -32,6 +32,7 @@ class ProfileWindow(QDialog):
         self.btns = {"profile_btns": [], "Na": []}
 
         # Switch back to main window when closed
+        self.rebuild_parent = False
         self.finished.connect(self.show_parent_on_close)
 
         # Set up the main layout and save to dict for reframing later
@@ -248,7 +249,7 @@ class ProfileWindow(QDialog):
     def logout(self) -> None:
         self.parent_window.logged_profile = None; self.parent_window.logged_in = False
         self.parent_window.status_label.setText(f"Not logged in")
-        self.parent_window.rebuild_frame("right")
+        self.rebuild_parent = True
         QMessageBox.information(self, "Success", "Logged out.")
         self.accept()
 
@@ -264,9 +265,10 @@ class ProfileWindow(QDialog):
         # Change logged in profile upon success, and rebuild right frame to update with user information
         if isinstance(result, Profile):
             self.parent_window.logged_profile = result
-            self.parent_window.rebuild_frame("right")
             self.parent_window.status_label.setText(f"Status: Logged In as {username}")
+            self.rebuild_parent = True
             QMessageBox.information(self, "Success", f"Welcome, {username}!")
+            self.accept()
         # Display error to user upon failure
         elif result == "Non-existent profile": QMessageBox.critical(self, "Profile Not Found", "Profile does not exist. Go back to main menu to create new.")
         elif result == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
@@ -286,9 +288,8 @@ class ProfileWindow(QDialog):
         success = self.parent_window.data_manager.delete_profile(self.logged_profile, password)
         # Delete user data and logout of windows upon success
         if success is True:
-            self.parent.logged_in = False; self.parent.logged_profile = None
-            self.parent_window.rebuild_frame("right")
-            self.parent_window.status_label.setText(f"Not logged in")
+            self.parent_window.logged_in = False; self.parent_window.logged_profile = None; self.rebuild_parent = True
+            self.parent_window.status_label.setText("Not logged in")
             QMessageBox.information(self, "Success", "Profile deleted.")
             self.accept()
         # Display error to user upon failure
@@ -335,7 +336,6 @@ class ProfileWindow(QDialog):
 
     # Helper function on profile label click to call correct function
     def label_click(self): self.choose_profile_icon()
-
     # Helper function to select a profile icon
     def choose_profile_icon(self):
         # Open the "Open File" Dialog
@@ -353,7 +353,7 @@ class ProfileWindow(QDialog):
 
             # Save a scaled version of the image in the correct path and return
             img = QPixmap(file_path).scaled(70,70); img.save(dest_path)
-            self.rebuild_frame("top")
+            self.rebuild_frame("top"); self.rebuild_parent = True
             QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
         # Display error on failure
         except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
@@ -362,6 +362,7 @@ class ProfileWindow(QDialog):
     def show_parent_on_close(self):
         if self.risk_slider.value() != self.logged_profile.get_data().get("Risk tolerance"):
             self.logged_profile.update_data({"Risk tolerance": self.risk_slider.value()})
+        if self.rebuild_parent: self.parent_window.rebuild_frame("right")
         self.parent_window.show()
 
 ############################################################################

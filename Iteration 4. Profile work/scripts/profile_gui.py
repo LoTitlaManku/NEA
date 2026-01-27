@@ -96,7 +96,7 @@ class ProfileWindow(QDialog):
         scroll_layout = QVBoxLayout(scroll_widget); scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Create a widget with ticker and percent change for every saved stock
-        saved_tickers = self.get_profile_data().get("data", {}).get("Saved stocks", [])
+        saved_tickers = self.logged_profile.get_data().get("Saved stocks", [])
         for index, ticker in enumerate(saved_tickers):
             # Find latest day of data
             data = peek_data(ticker, 1)
@@ -226,11 +226,6 @@ class ProfileWindow(QDialog):
         self.main_frames.update({frame_pos: [new, stretch]})
         self.main_layout.insertWidget(index, new, stretch)
 
-    # Helper function to retrieve the logged in profile's data and username
-    def get_profile_data(self) -> dict:
-        if self.logged_profile is None: return {}
-        else: return {"username": self.logged_profile.get_username(), "data": self.logged_profile.get_data()}
-
     # Displays a menu to move or delete a stock
     def show_stock_menu(self, ticker: str, current_index: int) -> None:
         # Menu styling
@@ -240,7 +235,7 @@ class ProfileWindow(QDialog):
 
         # Disable Move Up if at top, Move Down if at bottom
         if current_index == 0: move_up.setEnabled(False)
-        if current_index == len(self.get_profile_data().get("data", {}).get("Saved stocks", [])) - 1:
+        if current_index == len(self.logged_profile.get_data().get("Saved stocks", [])) - 1:
             move_down.setEnabled(False)
 
         # Call correct helper function
@@ -251,14 +246,14 @@ class ProfileWindow(QDialog):
 
     # Helper function to swap stock positions in the list
     def reorder_stock(self, old_idx: int, new_idx: int) -> None:
-        stocks = self.get_profile_data().get("data", {}).get("Saved stocks", [])
+        stocks = self.logged_profile.get_data().get("Saved stocks", [])
         stocks[old_idx], stocks[new_idx] = stocks[new_idx], stocks[old_idx]
         self.logged_profile.update_data({"Saved stocks": stocks})
         self.rebuild_frame("bottom")
 
     # Helper function to remove a stock from the list
     def remove_stock(self, ticker: str) -> None:
-        current_data = self.get_profile_data().get("data", {})
+        current_data = self.logged_profile.get_data()
         current_data["Saved stocks"] = [s for s in current_data.get("Saved stocks", []) if s != ticker]
         self.logged_profile.update_data(current_data)
         self.rebuild_frame("bottom")
@@ -271,7 +266,7 @@ class ProfileWindow(QDialog):
         if not validate_ticker(ticker): QMessageBox.critical(self, "Failed", "Invalid ticker."); return
 
         # Add to the front of the list
-        current_data = self.get_profile_data().get("data", {}).get("Saved stocks", [])
+        current_data = self.logged_profile.get_data().get("Saved stocks", [])
         current_data.insert(0, ticker)
         self.logged_profile.update_data({"Saved stocks": current_data})
         self.rebuild_frame("bottom")
@@ -345,7 +340,7 @@ class ProfileWindow(QDialog):
         if not file_path: return
         try:
             # Export data to chosen path
-            data_to_export = self.get_profile_data().get("data", {})
+            data_to_export = self.logged_profile.get_data()
             with open(file_path, "w") as f: json.dump(data_to_export, f, indent=4)
             QMessageBox.information(self, "Success", f"Data exported to {file_path}")
         # Display error on failure

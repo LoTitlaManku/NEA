@@ -174,11 +174,6 @@ class MainWindow(QMainWindow):
         self.main_frames.update({frame_pos: [new, stretch]})
         self.main_layout.insertWidget(index, new, stretch)
 
-    # Helper function to retrieve the logged in profile's data and username
-    def get_profile_data(self) -> dict:
-        if not self.logged_in: return {}
-        else: return {"username": self.logged_profile.get_username(), "data": self.logged_profile.get_data()}
-
     # Called when the profile label is clicked
     def label_click(self) -> None:
         # If logged in, open new profile window
@@ -291,8 +286,8 @@ Time Period: {selected_time_period}
     # Helper function to save the state of the graph (TBD: to be developed further)
     def save_graph(self) -> None:
         # Wait 2 seconds, then display the graph has been saved
-        msg = QWidget(self); msg.setWindowFlags(Qt.WindowType.FramelessWindowHint |
-                                                Qt.WindowType.BypassWindowManagerHint)
+        msg = QWidget(self)
+        msg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.BypassWindowManagerHint)
         msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         layout = QVBoxLayout(msg); label = QLabel("Saved.")
         label.setStyleSheet("background-color: black; color: white; padding: 5px; border-radius: 5px;")

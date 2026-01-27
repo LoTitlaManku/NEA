@@ -26,6 +26,10 @@ class Profile:
     def get_username(self) -> str:
         return self.__username
 
+    # Get username AND data
+    def get_full_data(self) -> dict:
+        return {"username": self.__username, "data": self.get_data()}
+
     # Validate the password for the profile
     def validate_password(self, password: str) -> bool:
         if self.__data.get("password") == password: return True

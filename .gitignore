@@ -1,0 +1,15 @@
+
+# Virtual Environment
+.venv/
+__pycache__/
+*.pyc
+
+# Project specific caches
+"Iteration 5. End of Times/stock_cache/"
+.python-version
+
+# IDE files
+.idea/
+.vscode/
+uv.lock
+

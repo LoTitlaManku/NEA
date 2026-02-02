@@ -174,6 +174,11 @@ class MainWindow(QMainWindow):
         self.main_frames.update({frame_pos: [new, stretch]})
         self.main_layout.insertWidget(index, new, stretch)
 
+    # Helper function to retrieve the logged in profile's data and username
+    def get_profile_data(self) -> dict:
+        if not self.logged_in: return {}
+        else: return self.logged_profile.get_full_data()
+
     # Called when the profile label is clicked
     def label_click(self) -> None:
         # If logged in, open new profile window

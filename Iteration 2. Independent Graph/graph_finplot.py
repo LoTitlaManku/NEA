@@ -152,7 +152,7 @@ class StockPlotter(QMainWindow):
     # Helper function to download data or load from cache
     def _load_data(self, ticker: str, timeframe: str = "daily") -> pd.DataFrame or None:
         # Try to see if there is a cache file with the data
-        cache_file = os.path.join("stock_data_cache", f"{ticker}_{timeframe}.csv")
+        cache_file = os.path.join("stock_cache", f"{ticker}_{timeframe}.csv")
         if os.path.exists(cache_file):
             print(f"[CACHE] loaded {ticker}:{timeframe}")
             return pd.read_csv(cache_file, index_col="Date", parse_dates=True)
@@ -167,7 +167,7 @@ class StockPlotter(QMainWindow):
 
         if data.empty: return None
 
-        if not os.path.exists("stock_data_cache"): os.makedirs("stock_data_cache")
+        if not os.path.exists("stock_cache"): os.makedirs("stock_cache")
 
         # Ensures the date is indexing the data
         data.columns = data.columns.get_level_values(0); data.index.name = "Date"

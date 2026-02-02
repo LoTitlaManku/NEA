@@ -1,0 +1,3 @@
+move rebuild_frame function to custom widgets file and rename "custom widget controls"
+
+carbon set width to fixed 1100

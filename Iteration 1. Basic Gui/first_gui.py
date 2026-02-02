@@ -28,9 +28,9 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_frame); left_layout.setContentsMargins(0,0,0,0); left_layout.setSpacing(0)
 
         # Define tool buttons
-        mouse_btn = self.make_img_grp_btn("mouse_tool", "left_btns", "img_src/mouse_icon_scaled.png", height=100)
-        line_tool_btn = self.make_img_grp_btn("line_tool", "left_btns", "img_src/line_icon_scaled.png", height=100)
-        notes_tool_btn = self.make_img_grp_btn("notes_tool", "left_btns", "img_src/notes_icon_scaled.png", height=100)
+        mouse_btn = self.make_img_grp_btn("mouse_tool", "left_btns", "imgs/mouse_icon_scaled.png", height=100)
+        line_tool_btn = self.make_img_grp_btn("line_tool", "left_btns", "imgs/line_icon_scaled.png", height=100)
+        notes_tool_btn = self.make_img_grp_btn("notes_tool", "left_btns", "imgs/notes_icon_scaled.png", height=100)
 
         left_layout.addWidget(mouse_btn); left_layout.addWidget(line_tool_btn); left_layout.addWidget(notes_tool_btn); left_layout.addStretch()
         return left_frame
@@ -47,18 +47,18 @@ class MainWindow(QMainWindow):
         graph_type_btn = QPushButton(); graph_type_btn.setCheckable(True); graph_type_btn.setFixedWidth(100)
         graph_type_btn.name = "graph_type_btn"; graph_type_btn.group = "top_btns"
         graph_type_btn.setStyleSheet(f"""
-        QPushButton {{background-image: url('img_src/candlestick_icon_scaled.png'); background-repeat: no-repeat; background-position: center; background-color: {self.colours['Default']}}}
+        QPushButton {{background-image: url('imgs/candlestick_icon_scaled.png'); background-repeat: no-repeat; background-position: center; background-color: {self.colours['Default']}}}
         QPushButton:hover {{background-color: {self.colours['Hover']}}}
-        QPushButton:checked {{background-image: url('img_src/line_graph_icon_scaled.png'); background-repeat: no-repeat; background-position: center; background-color: {self.colours['Default']}}}
+        QPushButton:checked {{background-image: url('imgs/line_graph_icon_scaled.png'); background-repeat: no-repeat; background-position: center; background-color: {self.colours['Default']}}}
         QPushButton:checked:hover {{background-color: {self.colours['Hover']}}}        """)
         graph_type_btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         graph_type_btn.clicked.connect(lambda checked: self.testfunc(graph_type_btn))
 
         # Define graph stock edit buttons
-        add_stock_btn = self.make_indv_btn("add_stock_btn", "top_btns", 'img_src/add_stock_icon_scaled.png', width=100)
-        remove_stock_btn = self.make_indv_btn("remove_stock_btn", "top_btns", 'img_src/remove_stock_icon_scaled.png', width=100)
-        clear_graph_btn = self.make_indv_btn("clear_graph_btn", "top_btns", 'img_src/clear_graph_icon_scaled.png', width=100)
-        save_graph_btn = self.make_indv_btn("save_graph_btn", "top_btns", "img_src/save_graph_icon.png", width=100)
+        add_stock_btn = self.make_indv_btn("add_stock_btn", "top_btns", 'imgs/add_stock_icon_scaled.png', width=100)
+        remove_stock_btn = self.make_indv_btn("remove_stock_btn", "top_btns", 'imgs/remove_stock_icon_scaled.png', width=100)
+        clear_graph_btn = self.make_indv_btn("clear_graph_btn", "top_btns", 'imgs/clear_graph_icon_scaled.png', width=100)
+        save_graph_btn = self.make_indv_btn("save_graph_btn", "top_btns", "imgs/save_graph_icon.png", width=100)
 
         top_layout.addWidget(graph_type_btn); top_layout.addWidget(add_stock_btn); top_layout.addWidget(remove_stock_btn); top_layout.addWidget(clear_graph_btn)
         top_layout.addStretch(); top_layout.addWidget(save_graph_btn)
@@ -130,8 +130,8 @@ class MainWindow(QMainWindow):
 
         # Confirmation and redo widgets
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50); confirmations_layout.setContentsMargins(20,20,20,20)
-        reroll_btn = self.make_indv_btn("reroll_btn", "confirmation_btns", "img_src/reroll_icon_scaled.png", width=70, height=70)
-        confirm_pd_btn = self.make_indv_btn("confirm_pd_btn", "confirmation_btns", "img_src/confirm_icon_scaled.png", width=70, height=70)
+        reroll_btn = self.make_indv_btn("reroll_btn", "confirmation_btns", "imgs/reroll_icon_scaled.png", width=70, height=70)
+        confirm_pd_btn = self.make_indv_btn("confirm_pd_btn", "confirmation_btns", "imgs/confirm_icon_scaled.png", width=70, height=70)
 
         confirmations_layout.addWidget(reroll_btn); confirmations_layout.addWidget(confirm_pd_btn)
 

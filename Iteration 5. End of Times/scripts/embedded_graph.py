@@ -1,0 +1,160 @@
+
+import darkdetect
+import finplot as fplt
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
+
+from load_data import load_data
+
+############################################################################
+
+# Helper function to delete finplot items
+def safe_delete(item):
+    try: item.delete()
+    except:
+        try: item.remove()
+        except:
+            try: item.hide()
+            except: pass
+
+
+class StockGraph:
+    def __init__(self, parent: QMainWindow, container_layout: QVBoxLayout | QHBoxLayout):
+        # Define dictionaries for graph colours, and initialise other variables
+        self.parent = parent
+        self.line_colours = ["#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#17becf"]
+        self.candle_colours = [
+            {"bull": "#00ff00", "bear": "#ff0000"},
+            {"bull": "#ffff00", "bear": "#9467bd"},
+            {"bull": "#3486eb", "bear": "#2b2b2b"}
+        ]
+        self.loaded = {}; self.selected_type = "line"; self.resolution = "daily"; self.saved_view = None
+        self.keys_html = ""
+
+        # Create the graph and edit its visuals
+        self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
+        self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
+
+        # fplt.show(qt_exec=False)
+        container_layout.addWidget(self.ax.vb.win)
+
+    # Switch from line to candlestick and vice versa
+    def switch_graph_type(self):
+        # Save current viewing range to maintain same position upon view
+        try:
+            vr = self.ax.vb.viewRange()
+            self.saved_view = ([float(vr[0][0]), float(vr[0][1])], [float(vr[1][0]), float(vr[1][1])])
+        except: self.saved_view = None
+
+        self.selected_type = "candle" if self.selected_type == "line" else "line"
+
+        # Hide all items not part of selected graph type
+        for info in self.loaded.values():
+            for point in info.get("line", []):
+                try:
+                    if self.selected_type == "line": point.show()
+                    else: point.hide()
+                except: pass
+            for candle in info.get("candle", []):
+                try:
+                    if self.selected_type == "candle": candle.show()
+                    else: candle.hide()
+                except: pass
+
+        fplt.refresh()
+        self.update_keys_html()
+
+        # Try to restore the previous view
+        if not self.saved_view: return
+        xr, yr = self.saved_view
+        try: self.ax.vb.setRange(xRange=xr, yRange=None, padding=0)
+        except: pass
+
+    # Recreates the graph with different time-period (1hr or 1d)
+    def switch_graph_resolution(self):
+        self.resolution = "hourly" if self.resolution == "daily" else "daily"
+        self.parent.rebuild_graph()
+
+    # Add a stock to the graph
+    def add_ticker(self, ticker: str) -> str:
+        if ticker in self.loaded: return f"{ticker} already added"
+        if len(self.loaded) >= 3: return "Cannot load more than 3 tickers"
+
+        QApplication.processEvents()
+
+        # Loads the data and checks that it's valid
+        # hourly_data = load_data(ticker, "hourly")
+        # daily_data = load_data(ticker, "daily")
+        hourly_data, daily_data = (load_data(ticker, t) for t in ["1h", "1d"])
+        data = daily_data if self.resolution == "daily" else hourly_data
+        if any((df is None or df.empty) for df in [hourly_data, daily_data]): return "No data or invalid ticker"
+
+        # Get the colour the stock should be drawn as
+        colour_index = next((i for i in range(len(self.line_colours))
+                             if i not in [info['colour_index'] for info in self.loaded.values()]), 0)
+        line_colour, candle_color = self.line_colours[colour_index], self.candle_colours[colour_index]
+        fplt.candle_bear_color, fplt.candle_bull_color = None, None
+
+        # Create both the candle and line versions of the graphs
+        line_plot = fplt.plot(data["Close"], ax=self.ax, color=line_colour, width=2, legend=None)
+        candle_items = fplt.candlestick_ochl(data[["Open", "Close", "High", "Low"]], ax=self.ax, candle_width=0.6)
+
+        candle_items.colors.update({
+            'bull_body': candle_color["bull"],
+            'bull_shadow': candle_color["bull"],
+            'bear_body': candle_color["bear"],
+            'bear_shadow': candle_color["bear"]
+        })
+
+        # Update the dictionary of loaded tickers
+        self.loaded[ticker] = {
+            "hdf": hourly_data,
+            "ddf": daily_data,
+            "line": line_plot if isinstance(line_plot, list) else [line_plot],
+            "candle": candle_items if isinstance(candle_items, list) else [candle_items],
+            "colour_index": colour_index
+        }
+
+        # Hides the type of the graph that is not selected
+        if self.selected_type == "line":
+            for candle in self.loaded[ticker]['candle']: candle.hide()
+        else: line_plot.hide()
+
+        self.update_keys_html(); fplt.refresh()
+        return "success"
+
+    def remove_ticker(self, ticker: str) -> str:
+        if not ticker: return "No ticker selected"
+        if ticker not in self.loaded: return "Ticker not loaded"
+
+        QApplication.processEvents()
+
+        del self.loaded[ticker]
+        self.parent.rebuild_graph()
+        return "Success"
+
+    # Helper function to update colour keys for graph
+    def update_keys_html(self):
+        if not self.loaded:
+            self.keys_html = ""; return
+
+        # Iterate through every loaded stock and add its colour code to a html format string
+        parts = []
+        for ticker, info in self.loaded.items():
+            if self.selected_type == "line":
+                # If line type, single colour key
+                line_colour = self.line_colours[info["colour_index"]]
+                parts.append(f"<span style='display:inline-block; padding:2px 6px; background:{line_colour};"
+                              "color:#fff; border-radius:3px; margin-right:6px;'>{ticker}</span>")
+            elif self.selected_type == "candle":
+                # If candle type, double colour key for close gain and close loss
+                candle_colour = self.candle_colours[info.get("colour_index")]
+                parts.append(f"""
+                <span style="display:inline-block; padding:2px 6px; color:{'#fff' if darkdetect.isDark() else '#000'};
+                             border-radius:3px; margin-right:6px;">{ticker}</span>
+                <span style="display:inline-block; padding:2px 6px; background:{candle_colour['bull']}; 
+                             color:{candle_colour['bull']}; border-radius:3px; margin-right:6px;">---</span>
+                <span style="display:inline-block; padding:2px 6px; background:{candle_colour['bear']}; 
+                             color:{candle_colour['bear']}; border-radius:3px; margin-right:6px;">---</span>
+                """)
+
+        self.keys_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"

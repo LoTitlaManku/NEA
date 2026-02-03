@@ -5,9 +5,10 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
                              QWidget, QLabel, QFrame, QDialog, QLineEdit)
 
-from profile import DataManager, Profile
+from profile_control import DataManager, Profile
 from profile_gui import ProfileWindow
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
+from embedded_graph import StockGraph
 
 # To find the absolute path of image files
 import os
@@ -83,14 +84,13 @@ class MainWindow(QMainWindow):
                                           secondary_img=img_2, desc=desc, width=100)
                              for name, img, img_2, desc in graph_btns]   )
 
-        # Create graph frame (TBD: to be developed further)
-        graph_frame = QFrame(); layout = QVBoxLayout(graph_frame); layout.setContentsMargins(5, 5, 5, 5)
-        graph_frame.setStyleSheet("border: 1px solid black"); graph_label = QLabel("Graph Area")
-        graph_label.setAlignment(Qt.AlignmentFlag.AlignCenter); graph_label.setStyleSheet("border: none")
-        layout.addWidget(graph_label)
+        # Create graph frame
+        self.graph_container = QVBoxLayout()
+        self.graph = StockGraph(self, self.graph_container)
+        self.graph.add_ticker("AAPL") # TEMP
 
         # Add top frame and graph frame to center layout
-        add_to_layout(center_layout, [top_frame, graph_frame], size_ratios=[1,10])
+        add_to_layout(center_layout, [top_frame, self.graph_container], size_ratios=[1,10])
         return center_frame
 
     # Initialize the right sidebar with profile, prediction settings, and results

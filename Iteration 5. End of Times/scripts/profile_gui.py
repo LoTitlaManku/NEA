@@ -10,7 +10,7 @@ from PyQt6.QtGui import QPixmap, QCursor, QImage
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
                              QFileDialog, QWidget, QLabel, QFrame,  QDialog, QMenu, QLineEdit, QScrollArea)
 
-from profile import Profile
+from profile_control import Profile
 from load_data import peek_data, validate_ticker
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 

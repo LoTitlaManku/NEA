@@ -3,7 +3,8 @@ import sys
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
-                             QWidget, QLabel, QFrame, QDialog, QLineEdit)
+                             QWidget, QLabel, QFrame, QDialog, QLineEdit, QComboBox)
+import finplot as fplt
 
 from profile_control import DataManager, Profile
 from profile_gui import ProfileWindow
@@ -62,31 +63,53 @@ class MainWindow(QMainWindow):
         center_frame = QFrame(); center_layout = QVBoxLayout(center_frame)
         center_layout.setContentsMargins(0 ,0 ,0 ,0)
 
+
+
         # Top frame styling
         top_frame = QFrame(); top_frame.setStyleSheet("border: 1px solid black")
         top_layout = QHBoxLayout(top_frame); top_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         top_layout.setContentsMargins(0 ,0 ,0 ,0); top_layout.setSpacing(0)
+        #
+        # # Create graph edit buttons with custom class and add to top frame
+        # graph_btns = [("graph_type_btn", abs_file("candlestick_icon_scaled.png"),
+        #                	abs_file("line_graph_icon_scaled.png"),
+        #                	"Switch between candlestick and line graph formats" ),
+        #               ("add_stock_btn", abs_file("add_stock_icon_scaled.png"), None,
+        #                	"Add a stock to the graph (NOTE: if prediction plotted, it will not work)" ),
+        #               ("remove_stock_btn", abs_file("remove_stock_icon_scaled.png"), None,
+        #                	"Remove a stock from the graph" ),
+        #               ("clear_graph_btn", abs_file("clear_graph_icon_scaled.png"), None,
+        #                	"Clear the graph of all stocks and annotations" ),
+        #               ("save_graph_btn", abs_file("save_graph_icon.png"), None,
+        #                	"Save the current state of the graph" ) ]
+        # add_to_layout(top_layout, stretches=[4],
+        #               items=[CustomButton(name, "top_btns", "indv", parent=self, img=img,
+        #                                   secondary_img=img_2, desc=desc, width=100)
+        #                      for name, img, img_2, desc in graph_btns]   )
 
-        # Create graph edit buttons with custom class and add to top frame
-        graph_btns = [("graph_type_btn", abs_file("candlestick_icon_scaled.png"),
-                       	abs_file("line_graph_icon_scaled.png"),
-                       	"Switch between candlestick and line graph formats" ),
-                      ("add_stock_btn", abs_file("add_stock_icon_scaled.png"), None,
-                       	"Add a stock to the graph (NOTE: if prediction plotted, it will not work)" ),
-                      ("remove_stock_btn", abs_file("remove_stock_icon_scaled.png"), None,
-                       	"Remove a stock from the graph" ),
-                      ("clear_graph_btn", abs_file("clear_graph_icon_scaled.png"), None,
-                       	"Clear the graph of all stocks and annotations" ),
-                      ("save_graph_btn", abs_file("save_graph_icon.png"), None,
-                       	"Save the current state of the graph" ) ]
-        add_to_layout(top_layout, stretches=[4],
-                      items=[CustomButton(name, "top_btns", "indv", parent=self, img=img,
-                                          secondary_img=img_2, desc=desc, width=100)
-                             for name, img, img_2, desc in graph_btns]   )
+        self.ticker_input = QLineEdit(); self.ticker_input.setPlaceholderText("Enter ticker (e.g. AAPL, TSLA, BTC-USD)")
+        self.ticker_list_widget = QComboBox()
+
+        # self.stock_key_label = QLabel(""); self.stock_key_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        # self.stock_key_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+        add_to_layout(top_layout,
+            items=[QLabel("Ticker:"), self.ticker_input,
+                   CustomButton("add_stock_btn", "top_btns", "indv", self, text="Add Ticker"),
+                   QLabel("Loaded:"), self.ticker_list_widget,
+                   CustomButton("remove_stock_btn", "top_btns", "indv", self, text="Remove Ticker"),
+                   CustomButton("graph_type_btn", "top_btns", "indv", self, text="Switch type"),
+                   CustomButton("graph_res_btn", "top_btns", "indv", self, text="Switch resolution"),
+                   CustomButton("save_graph_btn", "top_btns", "indv", self, img=abs_file("save_graph_icon.png")),
+                   ]
+        )
+
+
 
         # Create graph frame
         self.graph_container = QVBoxLayout()
-        self.graph = StockGraph(self, self.graph_container)
+        self.graph = StockGraph(self)
+        self.graph_container.addWidget(self.graph.ax.vb.win)
         self.graph.add_ticker("AAPL") # TEMP
 
         # Add top frame and graph frame to center layout
@@ -174,10 +197,25 @@ class MainWindow(QMainWindow):
         self.main_frames.update({frame_pos: [new, stretch]})
         self.main_layout.insertWidget(index, new, stretch)
 
-    # Helper function to retrieve the logged in profile's data and username
+    def rebuild_graph(self):
+        # Delete old graph
+        self.graph_container.removeWidget(self.graph.ax.vb.win)
+        self.graph.rebuild_self()
+        self.graph_container.addWidget(self.graph.ax.vb.win)
+
     def get_profile_data(self) -> dict:
-        if not self.logged_in: return {}
-        else: return self.logged_profile.get_full_data()
+        if self.logged_in: return self.logged_profile.get_full_data()
+        else: return {}
+
+    def add_to_graph(self):
+        ticker = self.ticker_input.text().strip().upper()
+        status = self.graph.add_ticker(ticker)
+        print(status)
+
+    def remove_from_graph(self):
+        ticker = self.ticker_list_widget.currentText().strip()
+        self.graph.remove_ticker(ticker)
+
 
     # Called when the profile label is clicked
     def label_click(self) -> None:

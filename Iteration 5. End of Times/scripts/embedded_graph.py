@@ -18,7 +18,7 @@ def safe_delete(item):
 
 
 class StockGraph:
-    def __init__(self, parent: QMainWindow, container_layout: QVBoxLayout | QHBoxLayout):
+    def __init__(self, parent: QMainWindow):
         # Define dictionaries for graph colours, and initialise other variables
         self.parent = parent
         self.line_colours = ["#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#17becf"]
@@ -34,8 +34,42 @@ class StockGraph:
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
         self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
 
-        # fplt.show(qt_exec=False)
-        container_layout.addWidget(self.ax.vb.win)
+    def rebuild_self(self):
+        self.ax.vb.win.setParent(None)
+        self.ax.deleteLater()
+
+        # Create a new graph widget
+        self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
+        self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
+
+        # Iterate through every loaded stock, and re-add them to the graph
+        for ticker, info in self.loaded.items():
+            df = info['hdf'] if self.resolution == "hourly" else info['ddf']
+            colour_index = info['colour_index']
+            line_colour, candle_colour = self.line_colours[colour_index], self.candle_colours[colour_index]
+
+            # Create the graphs
+            line_plot = fplt.plot(df["Close"], ax=self.ax, color=line_colour, width=2, legend=None)
+            candle_items = fplt.candlestick_ochl(df[["Open", "Close", "High", "Low"]], ax=self.ax, candle_width=0.6)
+            candle_items.colors.update({
+                'bull_body': candle_colour['bull'],
+                'bull_shadow': candle_colour['bull'],
+                'bear_body': candle_colour['bear'],
+                'bear_shadow': candle_colour['bear']
+            })
+
+            # Update the dictionary with new plot
+            info['candle'] = candle_items if isinstance(candle_items, list) else [candle_items]
+            info['line'] = line_plot if isinstance(line_plot, list) else [line_plot]
+
+            # Hide not-selected
+            if self.selected_type == "line":
+                for candle in info['candle']: candle.hide()
+            else: line_plot.hide()
+
+        self.update_keys_html(); fplt.refresh()
+
+
 
     # Switch from line to candlestick and vice versa
     def switch_graph_type(self):
@@ -82,8 +116,6 @@ class StockGraph:
         QApplication.processEvents()
 
         # Loads the data and checks that it's valid
-        # hourly_data = load_data(ticker, "hourly")
-        # daily_data = load_data(ticker, "daily")
         hourly_data, daily_data = (load_data(ticker, t) for t in ["1h", "1d"])
         data = daily_data if self.resolution == "daily" else hourly_data
         if any((df is None or df.empty) for df in [hourly_data, daily_data]): return "No data or invalid ticker"
@@ -113,6 +145,7 @@ class StockGraph:
             "candle": candle_items if isinstance(candle_items, list) else [candle_items],
             "colour_index": colour_index
         }
+        self.parent.ticker_list_widget.addItem(ticker)
 
         # Hides the type of the graph that is not selected
         if self.selected_type == "line":
@@ -130,6 +163,7 @@ class StockGraph:
 
         del self.loaded[ticker]
         self.parent.rebuild_graph()
+        self.parent.ticker_list_widget.removeItem(self.parent.ticker_list_widget.findText(ticker))
         return "Success"
 
     # Helper function to update colour keys for graph

@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/Iteration 5. End of Times/scripts" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/Iteration 4. Profile work/stock_cache" />
+      <excludeFolder url="file://$MODULE_DIR$/Iteration 5. End of Times/stock_cache" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.13 virtualenv at C:\Users\adlan_3zfnjq7\Desktop\Alex - Main\School\Six Form\Comp Sci\NEA_I5\.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

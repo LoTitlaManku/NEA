@@ -1,7 +1,6 @@
 
-import darkdetect
 import finplot as fplt
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout
+from PyQt6.QtWidgets import QApplication, QMainWindow
 
 from load_data import load_data
 
@@ -175,12 +174,12 @@ class StockGraph:
                 # If line type, single colour key
                 line_colour = self.line_colours[info["colour_index"]]
                 parts.append(f"<span style='display:inline-block; padding:2px 6px; background:{line_colour};"
-                              "color:#fff; border-radius:3px; margin-right:6px;'>{ticker}</span>")
+                             f"color:#fff; border-radius:3px; margin-right:6px;'>{ticker}</span>")
             elif self.selected_type == "candle":
                 # If candle type, double colour key for close gain and close loss
                 candle_colour = self.candle_colours[info.get("colour_index")]
                 parts.append(f"""
-                <span style="display:inline-block; padding:2px 6px; color:{'#fff' if darkdetect.isDark() else '#000'};
+                <span style="display:inline-block; padding:2px 6px; color:#000000;
                              border-radius:3px; margin-right:6px;">{ticker}</span>
                 <span style="display:inline-block; padding:2px 6px; background:{candle_colour['bull']}; 
                              color:{candle_colour['bull']}; border-radius:3px; margin-right:6px;">---</span>
@@ -189,3 +188,8 @@ class StockGraph:
                 """)
 
         self.keys_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"
+        self.parent.keys_label.setText(self.keys_html)
+
+
+if __name__ == "__main__":
+    print("Wrong")

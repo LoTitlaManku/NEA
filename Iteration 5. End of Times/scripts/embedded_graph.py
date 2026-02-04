@@ -36,7 +36,8 @@ class StockGraph:
 
     def rebuild_self(self):
         self.ax.vb.win.setParent(None)
-        self.ax.deleteLater()
+        del self.ax
+        QApplication.processEvents()
 
         # Create a new graph widget
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
@@ -68,8 +69,6 @@ class StockGraph:
             else: line_plot.hide()
 
         self.update_keys_html(); fplt.refresh()
-
-
 
     # Switch from line to candlestick and vice versa
     def switch_graph_type(self):
@@ -152,14 +151,12 @@ class StockGraph:
             for candle in self.loaded[ticker]['candle']: candle.hide()
         else: line_plot.hide()
 
-        self.update_keys_html(); fplt.refresh()
+        self.update_keys_html()#; fplt.refresh()
         return "success"
 
     def remove_ticker(self, ticker: str) -> str:
         if not ticker: return "No ticker selected"
         if ticker not in self.loaded: return "Ticker not loaded"
-
-        QApplication.processEvents()
 
         del self.loaded[ticker]
         self.parent.rebuild_graph()

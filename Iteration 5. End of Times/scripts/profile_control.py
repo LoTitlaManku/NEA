@@ -2,6 +2,7 @@
 import json
 import os
 from cryptography.fernet import Fernet
+import bcrypt
 from scripts.config import DATA_DIR
 
 ############################################################################
@@ -32,7 +33,7 @@ class Profile:
 
     # Validate the password for the profile
     def validate_password(self, password: str) -> bool:
-        if self.__data.get("password") == password: return True
+        if self.__data.get("password") == self.__manager.hash_password(password): return True
         else: return False
 
 ############################################################################
@@ -70,6 +71,16 @@ class DataManager:
         encrypted_data = fernet.encrypt(json_data)
         with open(filename, "wb") as f: f.write(encrypted_data)
 
+    # Helper function to hash a password
+    @staticmethod
+    def hash_password(password: str) -> str:
+        password_bytes = password.encode('utf-8') # Password string to bytes
+
+        salt = bcrypt.gensalt(rounds=12)
+        hashed_bytes = bcrypt.hashpw(password_bytes, salt)
+
+        return hashed_bytes.decode('utf-8') # return string of hashed password
+
     # Return a profile if given username and password correct
     def get_profile(self, username: str, password: str) -> Profile | str:
         # Get key for correct profile
@@ -87,7 +98,7 @@ class DataManager:
         target_data = json.loads(target_data.decode())  # convert back into dict
 
         # Ensure the entered password was correct
-        if target_data.get("password", "") != password: return "Incorrect password"
+        if target_data.get("password", "") != self.hash_password(password): return "Incorrect password"
         return Profile(self, username, target_key, target_data)
 
     # Create a new profile for the given username and password
@@ -97,8 +108,9 @@ class DataManager:
 
         # Generate a new encryption key for that profile and encrypt empty data for it
         new_key = Fernet.generate_key(); fernet = Fernet(new_key)
-        data = fernet.encrypt(json.dumps({"password": password, "Saved stocks": [],
-                                          "Risk tolerance": 5}).encode()).decode("utf-8")
+        data = fernet.encrypt(json.dumps(  {"password": self.hash_password(password), "Saved stocks": [],
+                                            "Risk tolerance": 5}  ).encode()
+                              ).decode("utf-8")
         self.__profile_datas[username] = data
         with open(self.__data_file, "w") as f: json.dump(self.__profile_datas, f)
 

@@ -111,6 +111,8 @@ class MainWindow(QMainWindow):
         self.graph = StockGraph(self)
         self.graph_container.addWidget(self.graph.ax.vb.win)
         self.graph.add_ticker("AAPL") # TEMP
+        self.graph.add_ticker("TSLA") # TEMP
+
 
         # Add top frame and graph frame to center layout
         add_to_layout(center_layout, [top_frame, self.graph_container], size_ratios=[1,10])

@@ -1,5 +1,6 @@
 
 import finplot as fplt
+import pandas as pd
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
 from load_data import load_data
@@ -152,6 +153,9 @@ class StockGraph:
 
         self.update_keys_html()#; fplt.refresh()
         return "success"
+
+    def add_data(self, data: pd.DataFrame):
+        pass
 
     def remove_ticker(self, ticker: str) -> str:
         if not ticker: return "No ticker selected"

@@ -9,6 +9,7 @@ from profile_control import DataManager, Profile
 from profile_gui import ProfileWindow
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 from embedded_graph import StockGraph
+from predictor import BackgroundUpdater, run_prediction_pipline
 
 # To find the absolute path of image files
 import os
@@ -20,6 +21,7 @@ def abs_file(file: str) -> str: return os.path.join(IMG_DIR, file).replace("\\",
 class MainWindow(QMainWindow):
     # Classes
     graph: StockGraph
+    updater: BackgroundUpdater
     # Containers
     graph_container: QVBoxLayout
     pd_set_frame: QFrame
@@ -39,7 +41,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(abs_file("stocks.png")))
         self.setGeometry(100, 100, 1500, 900)
         self.setStyleSheet("QWidget {background-color: white; color: black;}")
-        self.btns = {"left_btns": [], "top_btns": [], "prediction_type_btns": [],
+        self.btns = {"left_btns": [], "top_btns": [], "pd_type_btns": [],
                      "time_period_btns": [], "confirmation_btns": []}
 
         # Initialize the profile logic
@@ -47,6 +49,8 @@ class MainWindow(QMainWindow):
         self.logged_in = False
         self.logged_profile: Profile | None = None
         self.status_label = QLabel("Not logged in")
+
+        self.updater = BackgroundUpdater()
 
         # Set up the main layout and save to dict for reframing later
         central = QWidget(); self.setCentralWidget(central)
@@ -120,10 +124,9 @@ class MainWindow(QMainWindow):
 
         # Create profile image icon and logging label and add to profile frame
         desc = "Click to log in" if not self.logged_in else "Click to switch to profile overview window"
-        for widget in [create_circle_label(self, clickable=True, diameter=120, desc=desc,
-                                           border=self.logged_in),
-                       self.status_label]:
-            profile_frame_layout.addWidget(widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        add_to_layout(profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
+                      items=[create_circle_label(self, clickable=True, diameter=120, desc=desc, border=self.logged_in),
+                             self.status_label])
 
         # Prediction settings frame styling (pd_set = prediction_settings)
         self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
@@ -137,11 +140,13 @@ class MainWindow(QMainWindow):
 
         # Create prediction type button selection
         pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
-        for name, text in [("linear_regression_btn", "Linear Reg"),
-                           ("random_forrest_btn", "Random Forrest"),
-                           ("ri_btn", "Reinforcement Learning") ]:
-            pd_type_layout.addWidget(CustomButton(name, "prediction_type_btns", "text_grp",
-                                                  parent=self, text=text, width=75, height=30))
+        add_to_layout(pd_type_layout,
+            items=[
+                CustomButton("1d", "pd_type_btns", "text_grp", self, text="day", width=75, height=15),
+                CustomButton("1h", "pd_type_btns", "text_grp", self, text="hour", width=75, height=15),
+            ]
+        )
+
 
         # Create time period button selection
         time_period_layout = QHBoxLayout(); time_period_layout.setSpacing(10)
@@ -153,7 +158,7 @@ class MainWindow(QMainWindow):
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50)
         confirmations_layout.setContentsMargins(20,20,20,20)
         for name, img in [("reroll_btn", abs_file("reroll_icon_scaled.png") ),
-                          ("confirm_pd_btn", abs_file("confirm_icon_scaled.png") ) ]:
+                          ("predict", abs_file("confirm_icon_scaled.png") ) ]:
             confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv",
                                                         parent=self, img=img, width=70, height=70))
 
@@ -270,39 +275,25 @@ class MainWindow(QMainWindow):
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
     # Called when start prediction button is clicked in right frame (TBD: to be developed further)
-    def start_prediction_simulation(self) -> None:
-        # Find ticker and risk level inputs, prediction type button, and time period button
+    def predict(self):
+        # Find ticker
         ticker = self.ticker_pd_input.text(); risk_level = self.risk_slider.value()
-        selected_prediction_type = next((btn.text() for btn in self.btns["prediction_type_btns"]
+        interval = next((btn.name for btn in self.btns["pd_type_btns"]
                                          if btn.isChecked()), None)
-        selected_time_period = next((btn.text() for btn in self.btns["time_period_btns"]
-                                     if btn.isChecked()), None)
-
-        # Validation to make sure all input fields are filled
-        if not all([ticker, selected_prediction_type, selected_time_period]):
-            QMessageBox.warning(self, "Input Error",
-                                "Please fill in all prediction settings before confirming.")
-            return
 
         # Disable frame for inputs while prediction is being processed
         self.pd_set_frame.setEnabled(False)
-        self.prediction_result_label.setText("Processing... (3s)")
+        self.prediction_result_label.setText("Processing...")
 
-        def finish_prediction_simulation():
-            # Re-enable prediction settings and show results (TBD: to be developed further)
-            self.pd_set_frame.setEnabled(True)
-            self.prediction_result_label.setText(f"""
-Completed Prediction. . .                       
---- INPUTS RECEIVED ---
-Ticker: {ticker}
-Prediction Type: {selected_prediction_type}
-Risk Level: {risk_level}
-Time Period: {selected_time_period}
------------------------""")  # Temp text to show completion
-            QMessageBox.information(self, "Prediction Status", "Successful")
+        forecast_results = run_prediction_pipline(ticker, interval)
 
-        # Wait 3 seconds then finish (TBD: to be developed further)
-        QTimer.singleShot(3000, finish_prediction_simulation)
+        # Re-enable prediction settings and show results (TBD: to be developed further)
+        self.pd_set_frame.setEnabled(True)
+        self.prediction_result_label.setText("Completed Prediction.")
+        QMessageBox.information(self, "Prediction Status", "Successful")
+
+
+
 
     # Called when save graph button is clicked (TBD: to be developed further)
     def show_graph_save_popup(self, btn) -> None:

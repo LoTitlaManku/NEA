@@ -6,6 +6,7 @@ import json
 import sys
 import joblib
 import warnings
+import random
 # math/logic imports
 import numpy as np
 import pandas as pd
@@ -28,41 +29,17 @@ import finplot as fplt
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor
+# Custom imports
+from load_data import load_data
 
 warnings.filterwarnings("ignore") # Future warnings clog up console
 
 ############################################################################
 
-# Load data for stock
-def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
-    # Try to see if there is a cache file with the data
-    if not os.path.exists("stock_data_cache"): os.makedirs("stock_data_cache")
-    cache_file = os.path.join("stock_data_cache", f"{ticker}_{interval}.csv")
-    if os.path.exists(cache_file):
-        # print(f"[CACHE] loaded {ticker}:{interval}")
-        df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
-        df.index.name = "Date"
-        df.index = pd.to_datetime(df.index).tz_localize(None)
-        return df
-
-    # Downloads the appropriate data from yahoo finance
-    # print(f"Downloading {ticker} for {interval}")
-    try: data = yf.download(ticker, period="max", interval=interval, progress=False, auto_adjust=False)
-    except: return None
-
-    if data.empty: return None
-    # Flattens columns if MultiIndex
-    if isinstance(data.columns, pd.MultiIndex): data.columns = data.columns.get_level_values(0)
-
-    # Strip timezones to avoid alignment errors later
-    data.index = pd.to_datetime(data.index).tz_localize(None)
-    data.index.name = "Date"
-
-    data.to_csv(cache_file, index=True)
-    return data
-
 # To update data for downloaded stocks every 15 minutes
 class BackgroundUpdater:
+    timer: QTimer
+
     def __init__(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.data_updater)
@@ -127,7 +104,7 @@ class BackgroundUpdater:
             except Exception as e: print(f"Error - {type(e).__name__} {e}")
 
             # To avoid rate limits
-            import random; time.sleep(random.uniform(0.05, 0.5))
+            time.sleep(random.uniform(0.05, 0.5))
 
     # Checks predictions for dates that have passed
     def accuracy_check(self):
@@ -552,6 +529,7 @@ def run_prediction_pipline(ticker: str, interval: str):
 
         # Graph the prediction
         # render_graph(ticker, interval, df, forecast_results, tech_info)
+        return forecast_results
     # except Exception as e: print(f"Error - {type(e).__name__}: {e}")
 
 # Adds in technical indicators, trains model if needed or loads it

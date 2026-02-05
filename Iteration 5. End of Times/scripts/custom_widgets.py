@@ -40,6 +40,8 @@ class CustomButton(QPushButton):
             "remove_stock_btn": lambda: self.parent.remove_from_graph(),
             "graph_type_btn": lambda: self.parent.switch_graph_type(),
             "graph_res_btn": lambda: self.parent.switch_graph_res(),
+            # Prediction
+            "predict": lambda: self.parent.predict(),
             # PofileWindow
             "logout_btn": lambda: self.parent.logout(),
             "change_profile_btn": lambda: self.parent.change_profile(),

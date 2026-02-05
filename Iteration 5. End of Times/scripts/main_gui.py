@@ -9,7 +9,8 @@ from profile_control import DataManager, Profile
 from profile_gui import ProfileWindow
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 from embedded_graph import StockGraph
-from predictor import BackgroundUpdater, run_prediction_pipline
+from predictor import run_prediction_pipline
+from load_data import BackgroundUpdater
 
 # To find the absolute path of image files
 import os
@@ -85,6 +86,7 @@ class MainWindow(QMainWindow):
         btn_layout = QHBoxLayout(); btn_layout.setSpacing(4)
 
         self.ticker_input = QLineEdit(); self.ticker_input.setPlaceholderText("Enter ticker (e.g. AAPL, TSLA, NVDA)")
+        self.ticker_input.returnPressed.connect(self.add_to_graph)
         self.ticker_list_widget = QComboBox()
 
         add_to_layout(btn_layout,
@@ -205,8 +207,13 @@ class MainWindow(QMainWindow):
 
     def add_to_graph(self):
         ticker = self.ticker_input.text().strip().upper()
+        if ticker == "": return
+
         status = self.graph.add_ticker(ticker)
-        print(status)
+        if status == "No data or invalid ticker":
+            QMessageBox.critical(self, "Error", "Invalid ticker")
+            return
+
         self.ticker_input.setText("")
 
     def remove_from_graph(self):
@@ -278,8 +285,7 @@ class MainWindow(QMainWindow):
     def predict(self):
         # Find ticker
         ticker = self.ticker_pd_input.text(); risk_level = self.risk_slider.value()
-        interval = next((btn.name for btn in self.btns["pd_type_btns"]
-                                         if btn.isChecked()), None)
+        interval = next((btn.name for btn in self.btns["pd_type_btns"] if btn.isChecked()), None)
 
         # Disable frame for inputs while prediction is being processed
         self.pd_set_frame.setEnabled(False)
@@ -289,11 +295,11 @@ class MainWindow(QMainWindow):
 
         # Re-enable prediction settings and show results (TBD: to be developed further)
         self.pd_set_frame.setEnabled(True)
-        self.prediction_result_label.setText("Completed Prediction.")
-        QMessageBox.information(self, "Prediction Status", "Successful")
+        results = "\n".join([f"FOR {time_key}: \n->Predicted Direction: {info['dir']}\n->Predicted Price: {info['price']} \n->Confidence: {info['conf']}"
+            for time_key, info in forecast_results.items()])
+        self.prediction_result_label.setText(results)
 
-
-
+        self.graph.add_future(ticker, interval, forecast_results)
 
     # Called when save graph button is clicked (TBD: to be developed further)
     def show_graph_save_popup(self, btn) -> None:

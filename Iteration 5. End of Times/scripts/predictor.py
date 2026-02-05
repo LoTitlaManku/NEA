@@ -15,7 +15,6 @@ from tqdm import tqdm
 import yfinance as yf
 import talib
 from datetime import timedelta, datetime, timezone, time
-import time
 # machine learning models imports
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
@@ -31,140 +30,9 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QColor
 # Custom imports
 from load_data import load_data
+from scripts.config import MODEL_DIR, LEDGER_DIR
 
 warnings.filterwarnings("ignore") # Future warnings clog up console
-
-############################################################################
-
-# To update data for downloaded stocks every 15 minutes
-class BackgroundUpdater:
-    timer: QTimer
-
-    def __init__(self):
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.data_updater)
-
-        # Run once on startup
-        self.data_updater()
-        self.accuracy_check()
-
-        # Calculate how long to wait till next update then run every 15 mins
-        now = datetime.now(timezone.utc)
-        minutes_to_wait = 15 - (now.minute % 15)
-        initial_delay_ms = (minutes_to_wait * 60 - now.second) * 1000
-
-        QTimer.singleShot(int(initial_delay_ms), self.update_loop)
-
-    # Loop to run updating script
-    def update_loop(self):
-        # Check if market is open
-        now_utc = datetime.now(timezone.utc)
-        if now_utc.weekday() >= 5 or not time(13, 30) <= now_utc.time() <= time(21, 30): return
-
-        # Run loop
-        self.data_updater()
-        if now_utc.minute == 30: self.accuracy_check()
-        self.timer.start(900000)
-
-    # Update data for every saved stock
-    @staticmethod
-    def data_updater():
-        if not os.path.exists("stock_data_cache"): return
-
-        # Loop through every file in the folder
-        for filename in tqdm(os.listdir("stock_data_cache"), desc="Updating data", unit="file"):
-            try:
-                # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
-                parts = filename.replace(".csv", "").split("_")
-                ticker, interval = parts[0], parts[1]
-
-                # Load existing cached stock data from file
-                cache_file = os.path.join("stock_data_cache", filename)
-                df = load_data(ticker, interval)
-
-                # Find time period for which data needs to be downloaded
-                time_diff = datetime.now() - df.index[-1]
-                period =  str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
-
-                needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
-                                or (interval == "1d" and time_diff.days >= 1))
-
-                if needs_update:
-                    # Fetch for the period that has passed
-                    new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
-                    if not new_data.empty:
-                        # Flatten columns if Multiindex and strip timezones to avoid alignment errors
-                        if isinstance(new_data.columns, pd.MultiIndex): new_data.columns = new_data.columns.get_level_values(0)
-                        new_data.index = pd.to_datetime(new_data.index).tz_localize(None)
-
-                        # Append and save
-                        updated_df = pd.concat([df, new_data])
-                        updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
-                        updated_df.to_csv(cache_file)
-            except Exception as e: print(f"Error - {type(e).__name__} {e}")
-
-            # To avoid rate limits
-            time.sleep(random.uniform(0.05, 0.5))
-
-    # Checks predictions for dates that have passed
-    def accuracy_check(self):
-        ledger_folder = "saved_predictions"
-        if not os.path.exists(ledger_folder): return
-
-        # Iterate through every ledger and validate them
-        for filename in os.listdir(ledger_folder):
-            try:
-                ticker = filename.split("_")[0]
-                self.validate_ledger(ticker, os.path.join(ledger_folder, filename))
-            except Exception as e: print(f"Error - {type(e).__name__} {e}")
-
-    # Validates all predictions in a given ledger
-    @staticmethod
-    def validate_ledger(ticker: str, ledger_path: str):
-        # Load ledger and find all entries that are unvalidated
-        ledger = pd.read_csv(ledger_path)
-        NaNs = ledger['Actual_Price'].isna()
-        if not NaNs.any(): return
-
-        # Load existing hourly and daily data for the stock
-        ledger['Target_Date'] = pd.to_datetime(ledger['Target_Date'], format='ISO8601')
-        df_h = load_data(ticker, "1h")
-        df_d = load_data(ticker, "1d")
-
-        # Iterate through all rows in ledger and validate
-        updated = False
-        for idx, row in ledger[NaNs].iterrows():
-            target_date = row['Target_Date']
-            start_date = row['Date_Predicted']
-            df = df_h if row['Interval'] == "1h" else df_d
-
-            # If predicted date has passed, determine correctness of prediction
-            if target_date in df.index:
-                start_price = float(df.asof(start_date)['Close'])
-                actual_price = float(df.asof(target_date)['Close'])
-                pred_price = float(row['Predicted_Price'])
-                direction = row['Direction']
-
-                # Check if the prediction is correct
-                direction_correct = True if (("UP" in direction and actual_price > start_price)
-                                       or ("DOWN" in direction and actual_price < start_price)) else False
-                price_accurate = abs(actual_price - pred_price) / actual_price <= 0.02
-
-                # Update validation fields in the records
-                ledger.at[idx, 'Actual_Price'] = round(actual_price, 2)
-                ledger.at[idx, 'Is_Correct'] = (direction_correct and price_accurate)
-                updated = True
-
-            # If predicted date outside market hours set invalid (unless time is 00:00 as 1d predictions set time to 00:00 for data consistency)
-            elif (target_date.weekday() >= 5 or not time(13, 30) <= target_date.time() <= time(21, 30)) and target_date.time() != time(0,0):
-                ledger.at[idx, "Actual_Price"] = "Invalid date"
-                ledger.at[idx, "Is_Correct"] = "Invalid date"
-                updated = True
-
-        if updated:
-            # Change dates back into strings for consistent formatting
-            ledger['Target_Date'] = ledger['Target_Date'].dt.strftime('%Y-%m-%d %H:%M')
-            ledger.to_csv(ledger_path, index=False)
 
 ############################################################################
 
@@ -331,7 +199,7 @@ class TrainingManager:
     # Save models for all horizons with the best performing model type
     def _save_winning_strategy_assets(self, ticker, interval, full_results, features_data, targets_dataframe):
         # Create the folder for this specific stock's model data to save
-        save_folder = os.path.join("saved_models", f"{ticker}_{interval}")
+        save_folder = os.path.join(MODEL_DIR, f"{ticker}_{interval}")
         if not os.path.exists(save_folder): os.makedirs(save_folder)
 
         # Save the names of indicators used
@@ -389,7 +257,7 @@ class TrainingManager:
     # Run all helper functions and consolidate the best model
     def run_training_pipeline(self, ticker: str, interval: str):
         # Remove any corrupt model paths (i.e. not all necessary files exist validated before call)
-        model_path = os.path.join("saved_models", f"{ticker}_{interval}")
+        model_path = os.path.join(MODEL_DIR, f"{ticker}_{interval}")
         if os.path.exists(model_path): shutil.rmtree(model_path)
 
         # Train and build models for ticker
@@ -436,14 +304,11 @@ class TrainingManager:
 
 # Save prediction to ledger
 def save_prediction(ticker: str, interval: str, current_date: datetime, forecast_results: dict):
-    save_folder = "saved_predictions"
-    if not os.path.exists(save_folder): os.makedirs(save_folder)
-
     # Check if that exact prediction has already been saved (note: using same model will always return the same prediction for the same data)
     if prediction_saved(ticker, interval, current_date): return
 
     # Iterate through the 3 horizons the model predicted and extract the necessary information
-    ledger_file = os.path.join(save_folder, f"{ticker}_ledger.csv")
+    ledger_file = os.path.join(LEDGER_DIR, f"{ticker}_ledger.csv")
     new_entries = []
     period = "h" if 'h' in interval else "d"
     for horizon, data in forecast_results.items():
@@ -469,7 +334,7 @@ def save_prediction(ticker: str, interval: str, current_date: datetime, forecast
 
 # Load prediction from ledger
 def load_prediction(ticker: str, interval: str, date: datetime):
-    ledger_file = os.path.join("saved_predictions", f"{ticker}_ledger.csv")
+    ledger_file = os.path.join(LEDGER_DIR, f"{ticker}_ledger.csv")
     ledger = pd.read_csv(ledger_file) # note: no validation needed as would always run prediction_saved() first
     date = date.strftime("%Y-%m-%d %H:%M")
 
@@ -494,7 +359,7 @@ def load_prediction(ticker: str, interval: str, date: datetime):
 
 # Checks if there exists an entry in the ledger for that time
 def prediction_saved(ticker: str, interval: str, date) -> bool:
-    ledger_file = os.path.join("saved_predictions", f"{ticker}_ledger.csv")
+    ledger_file = os.path.join(LEDGER_DIR, f"{ticker}_ledger.csv")
     if not os.path.exists(ledger_file): return False
 
     ledger = pd.read_csv(ledger_file)
@@ -506,10 +371,10 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
 
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str):
-    # try:
+    try:
         # Add in technical indicators
         df, processed_df, assets = prepare_prediction_data(ticker, interval)
-        if any(v is None for v in [df, processed_df, assets]): return
+        if any(v is None for v in [df, processed_df, assets]): return {}
 
         last_trade_date = df.index[-1]
 
@@ -520,21 +385,20 @@ def run_prediction_pipline(ticker: str, interval: str):
             tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
                          {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
                          "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
-                         float(df['Close'].iloc[
-                                   -1]))  # horizons, offsets, delta_type, period, last_trade_date, current_price
+                         float(df['Close'].iloc[-1]))  # horizons, offsets, delta_type, period, last_trade_date, current_price
 
             forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
             save_prediction(ticker, interval, last_trade_date, forecast_results)
         else: forecast_results = load_prediction(ticker, interval, last_trade_date)
 
-        # Graph the prediction
-        # render_graph(ticker, interval, df, forecast_results, tech_info)
         return forecast_results
-    # except Exception as e: print(f"Error - {type(e).__name__}: {e}")
+    except Exception as e:
+        print(f"Error - {type(e).__name__}: {e}")
+        return {}
 
 # Adds in technical indicators, trains model if needed or loads it
 def prepare_prediction_data(ticker: str, interval: str):
-    model_path = os.path.join("saved_models", f"{ticker}_{interval}")
+    model_path = os.path.join(MODEL_DIR, f"{ticker}_{interval}")
 
     # Ensure data exists
     df = load_data(ticker, interval)
@@ -648,51 +512,5 @@ def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results:
 
 ############################################################################
 
-def main():
-    # Temp app to run background updater (with main gui will be unneeded)
-    qt_app = QApplication.instance()
-    if not qt_app: qt_app = QApplication(sys.argv)
-    updater = BackgroundUpdater()
-
-    # Run main logic
-    # while True:
-    #     while (ticker := input("Enter ticker symbol: ").strip().upper() or "") == "": pass
-    #     while (interval := input("Select interval (1d, 1h) [default: 1d]: ").strip().lower() or "1d") not in ["1d", "1h"]: print("Invalid time period.")
-    #
-    #     run_prediction_pipline(ticker, interval)
-
-    # TESTING code (runs predictions on 500 random stocks)
-    # import random
-    # with open("all_tickers.json") as f:
-    #     tickers = json.load(f)["cleaned_tickers"]
-    # for n in range(500):
-    #     print(f"-   -   -   -   -   -   -   {n}   -   -   -   -   -   -   -")
-    #     ticker = random.choice(tickers)
-    #     for interval in ["1d", "1h"]:
-    #         run_prediction_pipline(ticker, interval)
-    # print(datetime.now())
-
-    # TESTING code (runs predictions on all saved models)
-    model_folders = os.listdir("saved_models")
-    start_time = time.time()
-    success_count, fail_count = 0, 0
-    for folder_name in tqdm(model_folders, desc="Predicting Stocks", unit="ticker"):
-        try:
-            parts = folder_name.split("_")
-            ticker, interval = parts[0], parts[1]
-
-            run_prediction_pipline(ticker, interval)
-            success_count += 1
-
-        except Exception as e:
-            print(f"\n❌ Failed to predict for {folder_name}: {type(e).__name__} - {e}")
-            fail_count += 1
-
-    print(f"Total Processed: {len(model_folders)}")
-    print(f"Successful:      {success_count}")
-    print(f"Failed:          {fail_count}")
-    print(f"Total Time:      {(time.time() - start_time) / 60:.2f} minutes")
-
-
 if __name__ == "__main__":
-    main()
+    print("Wrong")

@@ -10,8 +10,10 @@ DATA_DIR = os.path.join(ROOT_DIR, "data")
 IMG_DIR = os.path.join(ROOT_DIR, "imgs")
 ICON_DIR = os.path.join(ROOT_DIR, "profile_icons")
 CACHE_DIR = os.path.join(ROOT_DIR, "stock_cache")
+MODEL_DIR = os.path.join(ROOT_DIR, "models")
+LEDGER_DIR = os.path.join(ROOT_DIR, "ledgers")
 
 # Create them if they don't exist
-for path in [DATA_DIR, IMG_DIR, ICON_DIR, CACHE_DIR]:
+for path in [DATA_DIR, IMG_DIR, ICON_DIR, CACHE_DIR, MODEL_DIR, LEDGER_DIR]:
     if not os.path.exists(path):
         os.makedirs(path)

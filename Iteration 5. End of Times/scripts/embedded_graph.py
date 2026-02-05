@@ -1,7 +1,10 @@
 
 import finplot as fplt
 import pandas as pd
+import numpy as np
+from datetime import timedelta
 from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtGui import QColor
 
 from load_data import load_data
 
@@ -108,9 +111,12 @@ class StockGraph:
         self.parent.rebuild_graph()
 
     # Add a stock to the graph
-    def add_ticker(self, ticker: str) -> str:
+    def add_ticker(self, ticker: str, replace: bool = False) -> str:
         if ticker in self.loaded: return f"{ticker} already added"
-        if len(self.loaded) >= 3: return "Cannot load more than 3 tickers"
+        if len(self.loaded) >= 3 and replace:
+            self.remove_ticker(self.loaded.popitem())
+        elif len(self.loaded) >= 3 and not replace:
+            return "Cannot load more than 3 tickers"
 
         QApplication.processEvents()
 
@@ -151,11 +157,67 @@ class StockGraph:
             for candle in self.loaded[ticker]['candle']: candle.hide()
         else: line_plot.hide()
 
-        self.update_keys_html()#; fplt.refresh()
+        self.update_keys_html()
         return "success"
 
-    def add_data(self, data: pd.DataFrame):
-        pass
+    def add_future(self, ticker, interval, forecast_results):
+        ticker_info = self.loaded.get(ticker)
+        if ticker_info:
+            real_data = ticker_info["hdf" if "h" in interval else "ddf"]
+        else:
+            real_data = load_data(ticker, interval)
+
+        if self.resolution[0] not in interval:
+            self.switch_graph_resolution()
+
+        if ticker not in self.loaded.keys():
+            self.add_ticker(ticker, replace=True)
+
+        last_trade_date = real_data.index[-1]
+        delta_type = "hours" if "h" in interval else "days"
+        period = "h" if "h" in interval else "d"
+        current_price = float(real_data["Close"].iloc[-1])
+
+        # Setup data to show "future" by 30 days
+        future_dates = pd.date_range(start=last_trade_date + timedelta(**{delta_type: 1}), periods=30, freq=period)
+        full_data = pd.concat([real_data, pd.DataFrame(np.nan, index=future_dates, columns=real_data.columns)])
+        forecast_dates = [last_trade_date] + [forecast_results[d]['target_date'] for d in [1,5,21]]
+
+        # Turn prediction dots into smooth line
+        def create_forecast_path(key):
+            forecast_prices = [current_price] + [forecast_results[d][key] for d in [1,5,21]]
+            path_series = pd.Series(forecast_prices, index=forecast_dates)
+            return path_series.reindex(full_data.index).interpolate(method="linear").dropna()
+
+        tline_mid, tline_up, tline_lo = create_forecast_path('price'), create_forecast_path('up'), create_forecast_path('lo')
+
+        # Shading for uncertain areas
+        def paint_uncertain_zone(start_date, end_date, colour):
+            s_up = tline_up.loc[start_date:end_date]
+            if len(s_up) > 1:
+                upper_anchor = fplt.plot(s_up, width=0)
+                lower_anchor = fplt.plot(tline_lo.loc[start_date:end_date], width=0)
+                fill_colour = QColor(colour)
+                fill_colour.setAlphaF(0.2)
+                fplt.fill_between(upper_anchor, lower_anchor, color=fill_colour)
+
+        # To paint each horizon region a different colour
+        paint_uncertain_zone(last_trade_date, forecast_results[1]['target_date'], '#00ff88')
+        paint_uncertain_zone(forecast_results[1]['target_date'], forecast_results[5]['target_date'], '#00ccff')
+        paint_uncertain_zone(forecast_results[5]['target_date'], forecast_results[21]['target_date'], '#ffcc00')
+
+        # Plot outlines and actual prediction
+        fplt.plot(tline_up, ax=self.ax, color='#bbbbbb', width=0.5)
+        fplt.plot(tline_lo, ax=self.ax, color='#bbbbbb', width=0.5)
+        fplt.plot(tline_mid, ax=self.ax, color='#000000', style='--', width=2)
+
+        for_dates = {1: '1H', 5: '5H', 21: '21H'} if "h" in interval else {1: '1D', 5: '1W', 21: '1M'}
+        for days, label in for_dates.items():
+            fplt.add_text((forecast_results[days]['target_date'], forecast_results[days]['price']),
+                          f"{label}: ${forecast_results[days]['price']:.2f}", color='#ffffff')
+
+
+
 
     def remove_ticker(self, ticker: str) -> str:
         if not ticker: return "No ticker selected"

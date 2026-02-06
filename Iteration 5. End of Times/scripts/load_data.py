@@ -131,7 +131,7 @@ class BackgroundUpdater:
     # Checks predictions for dates that have passed
     def accuracy_check(self):
         # Iterate through every ledger and validate them
-        for filename in os.listdir(LEDGER_DIR):
+        for filename in tqdm(os.listdir(LEDGER_DIR), desc="Checking accuracy", unit="ledger"):
             try:
                 ticker = filename.split("_")[0]
                 self.validate_ledger(ticker, os.path.join(LEDGER_DIR, filename))

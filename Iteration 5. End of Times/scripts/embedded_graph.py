@@ -169,6 +169,7 @@ class StockGraph:
 
         if self.resolution[0] not in interval:
             self.switch_graph_resolution()
+        else: self.parent.rebuild_graph()
 
         if ticker not in self.loaded.keys():
             self.add_ticker(ticker, replace=True)

@@ -159,8 +159,8 @@ class MainWindow(QMainWindow):
         # Create confirmation and redo buttons
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50)
         confirmations_layout.setContentsMargins(20,20,20,20)
-        for name, img in [("reroll_btn", abs_file("reroll_icon_scaled.png") ),
-                          ("predict", abs_file("confirm_icon_scaled.png") ) ]:
+        for name, img in [("remove_pd_btn", abs_file("delete.png") ),
+                          ("predict_btn", abs_file("confirm_icon_scaled.png") ) ]:
             confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv",
                                                         parent=self, img=img, width=70, height=70))
 

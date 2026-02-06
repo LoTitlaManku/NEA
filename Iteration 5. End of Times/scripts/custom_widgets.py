@@ -34,14 +34,13 @@ class CustomButton(QPushButton):
         self.actions: dict[str, Callable] = {
             # MainWindow
             "save_graph_btn": lambda: self.parent.show_graph_save_popup(self),
-            "confirm_pd_btn": lambda: self.parent.start_prediction_simulation(),
+            "predict_btn": lambda: self.parent.predict(),
+            "remove_pd_btn": lambda: self.parent.rebuild_graph(),
             # Graph
             "add_stock_btn": lambda: self.parent.add_to_graph(),
             "remove_stock_btn": lambda: self.parent.remove_from_graph(),
             "graph_type_btn": lambda: self.parent.switch_graph_type(),
             "graph_res_btn": lambda: self.parent.switch_graph_res(),
-            # Prediction
-            "predict": lambda: self.parent.predict(),
             # PofileWindow
             "logout_btn": lambda: self.parent.logout(),
             "change_profile_btn": lambda: self.parent.change_profile(),

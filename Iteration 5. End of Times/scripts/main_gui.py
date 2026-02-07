@@ -3,14 +3,14 @@ import sys
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
-                             QWidget, QLabel, QFrame, QDialog, QLineEdit, QComboBox, QSlider)
+                             QWidget, QLabel, QFrame, QDialog, QLineEdit, QComboBox, QSlider, QProgressBar)
 
 from profile_control import DataManager, Profile
 from profile_gui import ProfileWindow
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 from embedded_graph import StockGraph
-from predictor import run_prediction_pipline
-from load_data import BackgroundUpdater
+from predictor import TrainingWorker
+from load_data import UpdateManager, validate_ticker
 
 # To find the absolute path of image files
 import os
@@ -22,7 +22,8 @@ def abs_file(file: str) -> str: return os.path.join(IMG_DIR, file).replace("\\",
 class MainWindow(QMainWindow):
     # Classes
     graph: StockGraph
-    updater: BackgroundUpdater
+    updater: UpdateManager
+    thread: TrainingWorker
     # Containers
     graph_container: QVBoxLayout
     pd_set_frame: QFrame
@@ -30,6 +31,8 @@ class MainWindow(QMainWindow):
     ticker_input: QLineEdit
     ticker_pd_input: QLineEdit
     ticker_list_widget: QComboBox
+    type_dropdown: QComboBox
+    res_dropdown: QComboBox
     risk_slider: QSlider
     # Display
     prediction_result_label: QLabel
@@ -50,8 +53,6 @@ class MainWindow(QMainWindow):
         self.logged_in = False
         self.logged_profile: Profile | None = None
         self.status_label = QLabel("Not logged in")
-
-        self.updater = BackgroundUpdater()
 
         # Set up the main layout and save to dict for reframing later
         central = QWidget(); self.setCentralWidget(central)
@@ -85,9 +86,18 @@ class MainWindow(QMainWindow):
         top_layout = QVBoxLayout()
         btn_layout = QHBoxLayout(); btn_layout.setSpacing(4)
 
+        # Ticker input and list
         self.ticker_input = QLineEdit(); self.ticker_input.setPlaceholderText("Enter ticker (e.g. AAPL, TSLA, NVDA)")
         self.ticker_input.returnPressed.connect(self.add_to_graph)
         self.ticker_list_widget = QComboBox()
+
+        # Drop-down lists
+        self.type_dropdown = QComboBox(); self.type_dropdown.addItems(["Line", "Candle"])
+        self.type_dropdown.currentTextChanged.connect(self.switch_graph_type)
+
+        self.res_dropdown = QComboBox(); self.res_dropdown.addItems(["Hourly", "Daily"])
+        self.res_dropdown.setCurrentText("Daily")
+        self.res_dropdown.currentTextChanged.connect(self.switch_graph_res)
 
         add_to_layout(btn_layout,
             items=[
@@ -95,8 +105,7 @@ class MainWindow(QMainWindow):
                 CustomButton("add_stock_btn", "top_btns", "indv", self, text="Add Ticker", height=15),
                 QLabel("Loaded:"), self.ticker_list_widget,
                 CustomButton("remove_stock_btn", "top_btns", "indv", self, text="Remove Ticker", height=15),
-                CustomButton("graph_type_btn", "top_btns", "indv", self, text="Switch type", height=15),
-                CustomButton("graph_res_btn", "top_btns", "indv", self, text="Switch resolution", height=15),
+                self.type_dropdown, self.res_dropdown,
                 CustomButton("save_graph_btn", "top_btns", "indv", self, img=abs_file("save_graph_icon.png"), height=15),
             ]
         )
@@ -109,8 +118,21 @@ class MainWindow(QMainWindow):
         self.graph = StockGraph(self)
         self.graph_container.addWidget(self.graph.ax.vb.win)
 
+
+        # Updater visuals
+        update_layout = QHBoxLayout()
+
+        self.update_label = QLabel()
+        self.update_progress = QProgressBar()
+        self.update_progress.setMinimumHeight(10)
+        self.update_progress.setTextVisible(False)
+
+        add_to_layout(update_layout, [self.update_label, self.update_progress])
+        self.updater = UpdateManager(self.update_label, self.update_progress)
+
+
         # Add top frame and graph container to center layout
-        add_to_layout(center_layout, [top_layout, self.graph_container], size_ratios=[1,15])
+        add_to_layout(center_layout, [top_layout, self.graph_container, update_layout], size_ratios=[1,15,2])
         return center_frame
 
     # Initialize the right sidebar with profile, prediction settings, and results
@@ -281,25 +303,44 @@ class MainWindow(QMainWindow):
         # Catch any other errors and display them
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
-    # Called when start prediction button is clicked in right frame (TBD: to be developed further)
+
+    # Called when start prediction button is clicked in right frame
     def predict(self):
         # Find ticker
-        ticker = self.ticker_pd_input.text(); risk_level = self.risk_slider.value()
+        ticker = self.ticker_pd_input.text()
+        print(ticker)
+        if not validate_ticker(ticker):
+            QMessageBox.critical(self, "Error", "Invalid ticker"); return
         interval = next((btn.name for btn in self.btns["pd_type_btns"] if btn.isChecked()), None)
 
         # Disable frame for inputs while prediction is being processed
         self.pd_set_frame.setEnabled(False)
         self.prediction_result_label.setText("Processing...")
 
-        forecast_results = run_prediction_pipline(ticker, interval)
+        def prediction_complete(forecast_results):
+            # Re-enable prediction settings and show results (TBD: to be developed further)
+            self.pd_set_frame.setEnabled(True)
+            results = "\n".join([f"FOR {time_key}:\n"
+                                 f"-> Predicted Direction: {info['dir']}\n"
+                                 f"-> Predicted Price: {info['price']} \n"
+                                 f"-> Confidence: {info['conf']}"
+                                  for time_key, info in forecast_results.items()])
+            self.prediction_result_label.setText(results)
+            self.graph.add_future(ticker, interval, forecast_results)
 
-        # Re-enable prediction settings and show results (TBD: to be developed further)
+        self.thread = TrainingWorker(ticker, interval)
+        self.thread.finished.connect(prediction_complete)
+        self.thread.error.connect(self.prediction_fail)
+
+        self.thread.finished.connect(self.thread.quit)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+
+    def prediction_fail(self, error):
         self.pd_set_frame.setEnabled(True)
-        results = "\n".join([f"FOR {time_key}: \n->Predicted Direction: {info['dir']}\n->Predicted Price: {info['price']} \n->Confidence: {info['conf']}"
-            for time_key, info in forecast_results.items()])
-        self.prediction_result_label.setText(results)
+        self.prediction_result_label.setText(f"Prediction Failed: {error}")
 
-        self.graph.add_future(ticker, interval, forecast_results)
 
     # Called when save graph button is clicked (TBD: to be developed further)
     def show_graph_save_popup(self, btn) -> None:

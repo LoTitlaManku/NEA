@@ -114,10 +114,11 @@ class StockGraph:
     def add_ticker(self, ticker: str, replace: bool = False) -> str:
         if ticker in self.loaded: return f"{ticker} already added"
         if len(self.loaded) >= 3 and replace:
-            self.remove_ticker(self.loaded.popitem())
+            self.remove_ticker(self.loaded.popitem()[0])
         elif len(self.loaded) >= 3 and not replace:
             return "Cannot load more than 3 tickers"
 
+        self.parent.updater.prioritize(ticker)
         QApplication.processEvents()
 
         # Loads the data and checks that it's valid
@@ -161,18 +162,11 @@ class StockGraph:
         return "success"
 
     def add_future(self, ticker, interval, forecast_results):
-        ticker_info = self.loaded.get(ticker)
-        if ticker_info:
-            real_data = ticker_info["hdf" if "h" in interval else "ddf"]
-        else:
-            real_data = load_data(ticker, interval)
+        # Set graph settings to match prediction settings
+        if self.resolution[0] not in interval: self.switch_graph_resolution()
+        if ticker not in self.loaded.keys(): self.add_ticker(ticker, replace=True)
 
-        if self.resolution[0] not in interval:
-            self.switch_graph_resolution()
-        else: self.parent.rebuild_graph()
-
-        if ticker not in self.loaded.keys():
-            self.add_ticker(ticker, replace=True)
+        real_data = self.loaded[ticker]["hdf" if "h" in interval else "ddf"]
 
         last_trade_date = real_data.index[-1]
         delta_type = "hours" if "h" in interval else "days"
@@ -216,9 +210,6 @@ class StockGraph:
         for days, label in for_dates.items():
             fplt.add_text((forecast_results[days]['target_date'], forecast_results[days]['price']),
                           f"{label}: ${forecast_results[days]['price']:.2f}", color='#ffffff')
-
-
-
 
     def remove_ticker(self, ticker: str) -> str:
         if not ticker: return "No ticker selected"

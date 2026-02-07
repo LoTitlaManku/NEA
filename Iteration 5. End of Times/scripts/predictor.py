@@ -3,18 +3,16 @@
 import os
 import shutil
 import json
-import sys
 import joblib
 import warnings
-import random
 # math/logic imports
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from PyQt6.QtCore import QThread, pyqtSignal
 # data management imports
 import yfinance as yf
 import talib
-from datetime import timedelta, datetime, timezone, time
+from datetime import timedelta, datetime
 # machine learning models imports
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
@@ -23,11 +21,6 @@ from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import accuracy_score
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-# gui imports
-import finplot as fplt
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QColor
 # Custom imports
 from load_data import load_data
 from scripts.config import MODEL_DIR, LEDGER_DIR
@@ -35,6 +28,24 @@ from scripts.config import MODEL_DIR, LEDGER_DIR
 warnings.filterwarnings("ignore") # Future warnings clog up console
 
 ############################################################################
+
+# Create separate thread for trainer so can run concurrently with gui
+class TrainingWorker(QThread):
+    # Signal to send the results back to the GUI when finished
+    finished = pyqtSignal(dict)
+    error = pyqtSignal(str)
+
+    def __init__(self, ticker, interval):
+        super().__init__()
+        self.ticker = ticker
+        self.interval = interval
+
+    def run(self):
+        try:
+            forecast_results = run_prediction_pipline(self.ticker, self.interval)
+            self.finished.emit(forecast_results)
+        except Exception as e:
+            self.error.emit(str(e))
 
 # Control and train models
 class TrainingManager:
@@ -369,6 +380,7 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
     match = ledger[(ledger['Interval'] == interval) & (ledger['Date_Predicted'] == date)]
     return not match.empty
 
+
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str):
     try:
@@ -387,7 +399,7 @@ def run_prediction_pipline(ticker: str, interval: str):
                          "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
                          float(df['Close'].iloc[-1]))  # horizons, offsets, delta_type, period, last_trade_date, current_price
 
-            forecast_results = generate_forecasts(ticker, interval, processed_df, assets, tech_info)
+            forecast_results = generate_forecasts(processed_df, assets, tech_info)
             save_prediction(ticker, interval, last_trade_date, forecast_results)
         else: forecast_results = load_prediction(ticker, interval, last_trade_date)
 
@@ -420,7 +432,7 @@ def prepare_prediction_data(ticker: str, interval: str):
     return df, processed_df, (scaler, features, model_path)
 
 # Predict the price movement
-def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, assets: tuple, tech_info: tuple):
+def generate_forecasts(processed_df: pd.DataFrame, assets: tuple, tech_info: tuple):
     scaler, features, model_path = assets
     horizons, offsets, delta_type, period, last_trade_date, current_price =  tech_info
 
@@ -430,10 +442,7 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
     current_volatility_atr = float(processed_df['ATR'].iloc[-1])
     forecast_results = {}
 
-    # Calculate and display forecasts
-    # print(f"\n" + "=" * 40)
-    # print(f"LIVE PREDICTION FOR {ticker} ({interval})")
-    # print("=" * 40)
+    # Calculate forecasts
     for time_key in horizons.keys():
         # Load the specific model for this timeframe
         directional_classifier = joblib.load(f"{model_path}/cls_{time_key}{period}.pkl")
@@ -460,55 +469,8 @@ def generate_forecasts(ticker: str, interval: str, processed_df: pd.DataFrame, a
             'conf': confidence,
             'dir': direction
         }
-        # print(f"{horizons[time_key]:<10}: {direction} to ${predicted_price:.2f} | Conf: {confidence:.1%}")
-    # print("=" * 40 + "\n")
 
     return forecast_results
-
-# Render the graph with the predicted prices
-def render_graph(ticker: str, interval: str, df: pd.DataFrame, forecast_results: dict, tech_info: tuple):
-    horizons, offsets, delta_type, period, last_trade_date, current_price = tech_info
-    # Setup data to show "future" by 30 days
-    future_dates = pd.date_range(start=last_trade_date + timedelta(**{delta_type: 1}), periods=30, freq=period)
-    df_extended = pd.concat([df, pd.DataFrame(np.nan, index=future_dates, columns=df.columns)])
-    forecast_dates = [last_trade_date] + [forecast_results[d]['target_date'] for d in horizons.keys()]
-
-    # Turn prediction dots into smooth line
-    def create_forecast_path(key):
-        forecast_prices = [current_price] + [forecast_results[d][key] for d in horizons.keys()]
-        path_series = pd.Series(forecast_prices, index=forecast_dates)
-        return path_series.reindex(df_extended.index).interpolate(method="linear").dropna()
-
-    tline_mid, tline_up, tline_lo = create_forecast_path('price'), create_forecast_path('up'), create_forecast_path('lo')
-
-    # Finplot Rendering (temp until mixed with main gui)
-    ax = fplt.create_plot(f"AI Forecast: {ticker} ({interval})")
-    fplt.candlestick_ochl(df_extended[['Open', 'Close', 'High', 'Low']], ax=ax)
-
-    # Shading for uncertain areas
-    def paint_uncertain_zone(start_date, end_date, colour):
-        s_up = tline_up.loc[start_date:end_date]
-        if len(s_up) > 1:
-            upper_anchor = fplt.plot(s_up, width=0)
-            lower_anchor = fplt.plot(tline_lo.loc[start_date:end_date], width=0)
-            fill_colour = QColor(colour); fill_colour.setAlphaF(0.2)
-            fplt.fill_between(upper_anchor, lower_anchor, color=fill_colour)
-
-    # To paint each horizon region a different colour
-    paint_uncertain_zone(last_trade_date, forecast_results[1]['target_date'], '#00ff88')
-    paint_uncertain_zone(forecast_results[1]['target_date'], forecast_results[5]['target_date'], '#00ccff')
-    paint_uncertain_zone(forecast_results[5]['target_date'], forecast_results[21]['target_date'], '#ffcc00')
-
-    # Plot outlines and actual prediction
-    fplt.plot(tline_up, ax=ax, color='#bbbbbb', width=0.5)
-    fplt.plot(tline_lo, ax=ax, color='#bbbbbb', width=0.5)
-    fplt.plot(tline_mid, ax=ax, color='#000000', style='--', width=2)
-
-    for days, label in horizons.items():
-        fplt.add_text((forecast_results[days]['target_date'], forecast_results[days]['price']),
-                      f"{label}: ${forecast_results[days]['price']:.2f}", color='#ffffff')
-
-    fplt.show()
 
 ############################################################################
 

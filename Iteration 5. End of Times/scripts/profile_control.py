@@ -33,8 +33,9 @@ class Profile:
 
     # Validate the password for the profile
     def validate_password(self, password: str) -> bool:
-        if self.__data.get("password") == self.__manager.hash_password(password): return True
-        else: return False
+        stored_hash = self.__data.get("password", "").encode('utf-8')
+        password_bytes = password.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, stored_hash)
 
 ############################################################################
 
@@ -98,7 +99,11 @@ class DataManager:
         target_data = json.loads(target_data.decode())  # convert back into dict
 
         # Ensure the entered password was correct
-        if target_data.get("password", "") != self.hash_password(password): return "Incorrect password"
+        stored_hash = target_data.get("password", "").encode('utf-8')
+        password_bytes = password.encode('utf-8')
+        if not bcrypt.checkpw(password_bytes, stored_hash):
+            return "Incorrect password"
+
         return Profile(self, username, target_key, target_data)
 
     # Create a new profile for the given username and password

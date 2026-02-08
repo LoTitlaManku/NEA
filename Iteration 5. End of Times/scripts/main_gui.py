@@ -103,8 +103,8 @@ class MainWindow(QMainWindow):
         self.type_dropdown = QComboBox(); self.type_dropdown.addItems(["Line", "Candle"])
         self.type_dropdown.currentTextChanged.connect(self.switch_graph_type)
 
-        self.res_dropdown = QComboBox(); self.res_dropdown.addItems(["Hourly", "Daily"])
-        self.res_dropdown.setCurrentText("Daily")
+        self.res_dropdown = QComboBox(); self.res_dropdown.addItems(["15m", "1h", "4h", "1d"])
+        self.res_dropdown.setCurrentText("1d")
         self.res_dropdown.currentTextChanged.connect(self.switch_graph_res)
 
         add_to_layout(btn_layout,
@@ -114,7 +114,7 @@ class MainWindow(QMainWindow):
                 QLabel("Loaded:"), self.ticker_list_widget,
                 CustomButton("remove_stock_btn", "top_btns", "indv", self, text="Remove Ticker", height=15),
                 self.type_dropdown, self.res_dropdown,
-                CustomButton("save_graph_btn", "top_btns", "indv", self, img=abs_file("save_graph_icon.png"), height=15),
+                CustomButton("save_graph_btn", "top_btns", "indv", self, img=abs_file("save.png"), height=30),
             ]
         )
 
@@ -163,10 +163,13 @@ class MainWindow(QMainWindow):
         pd_set_layout = QVBoxLayout(self.pd_set_frame); pd_set_layout.setContentsMargins(3 ,3 ,3 ,3)
         pd_set_layout.setSpacing(20)
 
+        prediction_label = QLabel("Prediction settings:")
+        prediction_label.setStyleSheet("border: none; font-size: 16px; font-family: Aller Display; font-weight: bold")
+
         # Create ticker input widget
         self.ticker_pd_input = QLineEdit(); self.ticker_pd_input.setFixedHeight(30)
         self.ticker_pd_input.setPlaceholderText("Ticker symbol...")
-        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Aller Display")
+        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Aller Display; border: none; border-bottom: 2px solid #999;")
 
         # Create prediction type button selection
         pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
@@ -177,25 +180,20 @@ class MainWindow(QMainWindow):
             ]
         )
 
-
-        # Create time period button selection
-        time_period_layout = QHBoxLayout(); time_period_layout.setSpacing(10)
-        for name, text in [("day_btn", "Day"), ("month_btn", "Month"), ("year_btn", "Year")]:
-            time_period_layout.addWidget(CustomButton(name, "time_period_btns", "text_grp",
-                                                      parent=self, text=text, width=75, height=30))
-
         # Create confirmation and redo buttons
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50)
-        confirmations_layout.setContentsMargins(20,20,20,20)
-        for name, img in [("remove_pd_btn", abs_file("delete.png") ),
-                          ("predict_btn", abs_file("confirm_icon_scaled.png") ) ]:
-            confirmations_layout.addWidget(CustomButton(name, "confirmation_btns", "indv",
-                                                        parent=self, img=img, width=70, height=70))
+        add_to_layout(confirmations_layout,
+            items=[
+                CustomButton("remove_pd_btn", "confirmation_btns", "indv", self, img=abs_file("delete.png"), width=70, height=70),
+                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm_icon_scaled.png"), width=70, height=70),
+            ]
+        )
 
         # Add all prediction setting layouts to prediction settings container
-        add_to_layout(pd_set_layout, stretches=[-1],
-                      items=[self.ticker_pd_input, pd_type_layout, create_slider_layout(self),
-                             time_period_layout, confirmations_layout])
+        add_to_layout(
+            pd_set_layout, stretches=[-1],
+            items=[prediction_label, self.ticker_pd_input, pd_type_layout, create_slider_layout(self), confirmations_layout]
+        )
 
         # Create prediction result widget (TBD: to be developed further)
         prediction_result_frame = QFrame(); prediction_result_frame.setStyleSheet("border: 1px solid black")
@@ -207,7 +205,8 @@ class MainWindow(QMainWindow):
         prediction_result_layout.addWidget(self.prediction_result_label)
 
         # Add profile, prediction settings, and result frames to right frame
-        add_to_layout(right_layout, [profile_frame, self.pd_set_frame, prediction_result_frame],
+        add_to_layout(right_layout,
+                      [profile_frame, self.pd_set_frame, prediction_result_frame],
                       size_ratios=[1,10,10])
         return right_frame
 
@@ -253,6 +252,10 @@ class MainWindow(QMainWindow):
 
     def switch_graph_res(self):
         self.graph.switch_graph_resolution()
+
+    def switch_tool(self, tool: str):
+        tool_name = tool.split("_")[0]
+        self.graph.select_tool(tool_name)
 
     # Called when the profile label is clicked
     def label_click(self) -> None:
@@ -329,9 +332,10 @@ class MainWindow(QMainWindow):
             results = "\n".join([f"FOR {time_key}:\n"
                                  f"-> Predicted Direction: {info['dir']}\n"
                                  f"-> Predicted Price: {info['price']} \n"
-                                 f"-> Confidence: {info['conf']}"
+                                 f"-> Confidence: {round(info['conf']*100,1)}%"
                                   for time_key, info in forecast_results.items()])
             self.prediction_result_label.setText(results)
+            self.res_dropdown.setCurrentText(f"1{interval[0]}")
             self.graph.add_future(ticker, interval, forecast_results)
 
         self.thread = TrainingWorker(ticker, interval)

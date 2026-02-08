@@ -3,7 +3,8 @@ import finplot as fplt
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QMainWindow, QInputDialog
 from PyQt6.QtGui import QColor
 
 from load_data import load_data
@@ -30,12 +31,50 @@ class StockGraph:
             {"bull": "#ffff00", "bear": "#9467bd"},
             {"bull": "#3486eb", "bear": "#2b2b2b"}
         ]
-        self.loaded = {}; self.selected_type = "line"; self.resolution = "daily"; self.saved_view = None
+        self.loaded = {}
+        self.selected_type = "line"
+        self.resolution = "1d"
+        self.saved_view = None
+        self.active_tool = "mouse"
+        self.line_points = []
+
         self.keys_html = ""
 
         # Create the graph and edit its visuals
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
         self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
+        self.ax.vb.scene().sigMouseClicked.connect(self.on_plot_click)
+
+    def _update_mouse_mode(self):
+        enabled = self.active_tool == "mouse"
+        self.ax.vb.setMouseEnabled(x=enabled, y=enabled)
+
+    def select_tool(self, tool: str):
+        self.active_tool = tool
+        self.line_points = []
+        self._update_mouse_mode()
+
+    def on_plot_click(self, event):
+        if self.active_tool == "mouse" or event.button() != Qt.MouseButton.LeftButton: return
+
+        pos = event.scenePos()
+        coord = self.ax.vb.mapSceneToView(pos)
+        x, y = coord.x(), coord.y()
+
+        if self.active_tool == 'line':
+            self.line_points.append((x, y))
+            if len(self.line_points) == 1:
+                fplt.plot([x], [y], ax=self.ax, color='#ffffff', style='o')
+
+            if len(self.line_points) == 2:
+                line = pd.Series([self.line_points[0][1], self.line_points[1][1]],
+                                 index=[self.line_points[0][0], self.line_points[1][0]])
+                fplt.plot(line, color='#ffffff', ax=self.ax)
+                self.line_points = []
+
+        elif self.active_tool == 'text':
+            text, ok = QInputDialog.getText(self.parent, "Annotation", "Enter text:")
+            if ok and text: fplt.add_text((x, y), text, color='#ffffff', ax=self.ax)
 
     def rebuild_self(self):
         self.ax.vb.win.setParent(None)
@@ -45,10 +84,14 @@ class StockGraph:
         # Create a new graph widget
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
         self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
+        self.ax.vb.scene().sigMouseClicked.connect(self.on_plot_click)
 
         # Iterate through every loaded stock, and re-add them to the graph
         for ticker, info in self.loaded.items():
-            df = info['hdf'] if self.resolution == "hourly" else info['ddf']
+            df = info.get(f"{self.resolution}df", None)
+            if df is None:
+                df = load_data(ticker, self.resolution)
+                self.loaded[ticker][f"{self.resolution}df"] = df
             colour_index = info['colour_index']
             line_colour, candle_colour = self.line_colours[colour_index], self.candle_colours[colour_index]
 
@@ -81,18 +124,19 @@ class StockGraph:
             self.saved_view = ([float(vr[0][0]), float(vr[0][1])], [float(vr[1][0]), float(vr[1][1])])
         except: self.saved_view = None
 
-        self.selected_type = "candle" if self.selected_type == "line" else "line"
+        # self.selected_type = "candle" if self.selected_type == "line" else "line"
+        self.selected_type = self.parent.type_dropdown.currentText()
 
         # Hide all items not part of selected graph type
         for info in self.loaded.values():
             for point in info.get("line", []):
                 try:
-                    if self.selected_type == "line": point.show()
+                    if self.selected_type == "Line": point.show()
                     else: point.hide()
                 except: pass
             for candle in info.get("candle", []):
                 try:
-                    if self.selected_type == "candle": candle.show()
+                    if self.selected_type == "Candle": candle.show()
                     else: candle.hide()
                 except: pass
 
@@ -105,9 +149,9 @@ class StockGraph:
         try: self.ax.vb.setRange(xRange=xr, yRange=None, padding=0)
         except: pass
 
-    # Recreates the graph with different time-period (1hr or 1d)
+    # Recreates the graph with different time-period
     def switch_graph_resolution(self):
-        self.resolution = "hourly" if self.resolution == "daily" else "daily"
+        self.resolution = self.parent.res_dropdown.currentText()
         self.parent.rebuild_graph()
 
     # Add a stock to the graph
@@ -122,13 +166,12 @@ class StockGraph:
         QApplication.processEvents()
 
         # Loads the data and checks that it's valid
-        hourly_data, daily_data = (load_data(ticker, t) for t in ["1h", "1d"])
-        data = daily_data if self.resolution == "daily" else hourly_data
-        if any((df is None or df.empty) for df in [hourly_data, daily_data]): return "No data or invalid ticker"
+        data = load_data(ticker, self.resolution)
+        if data is None or data.empty: return "No data or invalid ticker"
 
         # Get the colour the stock should be drawn as
-        colour_index = next((i for i in range(len(self.line_colours))
-                             if i not in [info['colour_index'] for info in self.loaded.values()]), 0)
+        used_colours = {info["colour_index"] for info in self.loaded.values()}
+        colour_index = next((i for i in range(len(self.line_colours)) if i not in used_colours), 0)
         line_colour, candle_color = self.line_colours[colour_index], self.candle_colours[colour_index]
         fplt.candle_bear_color, fplt.candle_bull_color = None, None
 
@@ -145,8 +188,7 @@ class StockGraph:
 
         # Update the dictionary of loaded tickers
         self.loaded[ticker] = {
-            "hdf": hourly_data,
-            "ddf": daily_data,
+            f"{self.resolution}df": data,
             "line": line_plot if isinstance(line_plot, list) else [line_plot],
             "candle": candle_items if isinstance(candle_items, list) else [candle_items],
             "colour_index": colour_index
@@ -163,10 +205,10 @@ class StockGraph:
 
     def add_future(self, ticker, interval, forecast_results):
         # Set graph settings to match prediction settings
-        if self.resolution[0] not in interval: self.switch_graph_resolution()
+        if self.resolution != interval: self.switch_graph_resolution()
         if ticker not in self.loaded.keys(): self.add_ticker(ticker, replace=True)
 
-        real_data = self.loaded[ticker]["hdf" if "h" in interval else "ddf"]
+        real_data = self.loaded[ticker][f"{self.resolution}df"]
 
         last_trade_date = real_data.index[-1]
         delta_type = "hours" if "h" in interval else "days"

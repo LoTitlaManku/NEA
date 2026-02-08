@@ -33,6 +33,9 @@ class CustomButton(QPushButton):
         # Logic map for name of button to function call on click
         self.actions: dict[str, Callable] = {
             # MainWindow
+            "mouse_tool": lambda: self.parent.switch_tool(self.name),
+            "line_tool": lambda: self.parent.switch_tool(self.name),
+            "notes_tool": lambda: self.parent.switch_tool(self.name),
             "save_graph_btn": lambda: self.parent.show_graph_save_popup(self),
             "predict_btn": lambda: self.parent.predict(),
             "remove_pd_btn": lambda: self.parent.rebuild_graph(),

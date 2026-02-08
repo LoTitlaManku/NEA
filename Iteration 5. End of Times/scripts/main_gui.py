@@ -57,9 +57,11 @@ class MainWindow(QMainWindow):
         # Set up the main layout and save to dict for reframing later
         central = QWidget(); self.setCentralWidget(central)
         self.main_layout = QHBoxLayout(); central.setLayout(self.main_layout)
-        self.main_frames = {"left": [self.build_left_frame(), 1], "center": [self.build_center_frame(), 15],
+        self.main_frames = {"left": [self.build_left_frame(), 1],
+                            "center": [self.build_center_frame(), 15],
                             "right": [self.build_right_frame(), 3]}
-        for frame_info in self.main_frames.values(): self.main_layout.addWidget(frame_info[0], frame_info[1])
+        items, sizes = zip(*self.main_frames.values())
+        add_to_layout(self.main_layout, items, size_ratios=sizes)
 
     # Initialize the left sidebar with tool buttons
     def build_left_frame(self) -> QFrame:
@@ -69,11 +71,17 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(0)
 
         # Create tool buttons with the custom class and add to left frame
-        add_to_layout(left_layout,  stretches=[-1],
-            items=[CustomButton(name, "left_btns", "img_grp", parent=self, img=img, height=100)
-                for name,img in [("mouse_tool", abs_file("mouse_icon_scaled.png")),
-                                 ("line_tool", abs_file("line_icon_scaled.png")),
-                                 ("notes_tool", abs_file("notes_icon_scaled.png"))]])
+        add_to_layout(
+            left_layout, stretches=[-1],
+            items=[
+                CustomButton(name, "left_btns", "img_grp", parent=self, img=img, height=100)
+                for name, img in [
+                    ("mouse_tool", abs_file("mouse_icon_scaled.png")),
+                    ("line_tool", abs_file("line_icon_scaled.png")),
+                    ("notes_tool", abs_file("notes_icon_scaled.png"))
+                ]
+            ]
+        )
         return left_frame
 
     # Initialize the center frame with top bar and graph area
@@ -118,7 +126,6 @@ class MainWindow(QMainWindow):
         self.graph = StockGraph(self)
         self.graph_container.addWidget(self.graph.ax.vb.win)
 
-
         # Updater visuals
         update_layout = QHBoxLayout()
 
@@ -129,7 +136,6 @@ class MainWindow(QMainWindow):
 
         add_to_layout(update_layout, [self.update_label, self.update_progress])
         self.updater = UpdateManager(self.update_label, self.update_progress)
-
 
         # Add top frame and graph container to center layout
         add_to_layout(center_layout, [top_layout, self.graph_container, update_layout], size_ratios=[1,15,2])

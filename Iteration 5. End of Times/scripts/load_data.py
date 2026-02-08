@@ -91,9 +91,13 @@ class UpdateWorker(QThread):
             # Check for interrupt
             if self.priority_tickers:
                 ticker = self.priority_tickers.pop(0)
-                for file in [f"{CACHE_DIR}/{ticker}_{interval}.csv" for interval in ["1h", "1d"]]:
+                for file in [f"{ticker}_{interval}.csv" for interval in ["1h", "1d"]]:
+                    self.progress_msg.emit(f"Updating: {file}")
+                    self.progress_val.emit(int((len(processed) / len(files)) * 100))
+
                     self.update_data(file)
                     processed.add(file)
+                    sleep(random.uniform(0.05, 0.2))
                 continue
 
             # Regular update loop
@@ -110,11 +114,13 @@ class UpdateWorker(QThread):
                 if self.priority_tickers: break
                 sleep(random.uniform(0.05, 0.2))
 
+        self.progress_msg.emit("Completed data update")
+
     def update_data(self, filename: str):
         try:
             # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
-            parts = filename.replace(".csv", "").split("_")
-            ticker, interval = parts[0], parts[1]
+            name = os.path.splitext(filename)[0]
+            ticker, interval = name.rsplit("_", 1)
 
             # Load existing cached stock data from file
             cache_file = os.path.join(CACHE_DIR, filename)
@@ -146,13 +152,13 @@ class UpdateWorker(QThread):
 
     def check_accuracy(self):
         ledgers = os.listdir(LEDGER_DIR)
-        processed = 0
-        for i, filename in enumerate(ledgers):
+        for i, filename in enumerate(tqdm(ledgers, desc="Checking accuracy", unit="ledger")):
             self.progress_msg.emit(f"Checking Ledger: {filename}")
-            self.progress_val.emit(int((processed / len(ledgers)) * 100))
+            self.progress_val.emit(int((i / len(ledgers)) * 100))
             ticker = filename.split("_")[0]
             self.validate_ledger(ticker, os.path.join(LEDGER_DIR, filename))
-            processed += 1
+        self.progress_msg.emit("Completed ledger check")
+        self.progress_val.emit(100)
 
     @staticmethod
     def validate_ledger(ticker: str, ledger_path: str):
@@ -249,6 +255,3 @@ class UpdateManager(QObject):
     def prioritize(self, ticker: str):
         if ticker in self.worker.priority_tickers: return
         self.worker.priority_tickers.append(ticker)
-        # If the worker is idle, start it
-        if not self.worker.isRunning():
-            self.start_updating()

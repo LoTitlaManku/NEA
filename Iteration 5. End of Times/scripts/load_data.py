@@ -243,7 +243,7 @@ class UpdateManager(QObject):
         # Run loop
         self.start_updating()
         self.plabel.setText("Up to date")
-        QTimer.slingShot(5000, self.pbar.hide)
+        QTimer.singleShot(5000, self.pbar.hide)
         self.timer.start(900000)
 
     def start_updating(self):

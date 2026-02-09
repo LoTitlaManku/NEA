@@ -1,6 +1,7 @@
 
 # file imports
 import os
+os.environ["LOKY_MAX_CPU_COUNT"] = "1"
 import shutil
 import json
 import joblib

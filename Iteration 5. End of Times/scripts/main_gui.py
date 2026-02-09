@@ -164,12 +164,12 @@ class MainWindow(QMainWindow):
         pd_set_layout.setSpacing(20)
 
         prediction_label = QLabel("Prediction settings:")
-        prediction_label.setStyleSheet("border: none; font-size: 16px; font-family: Aller Display; font-weight: bold")
+        prediction_label.setStyleSheet("border: none; font-size: 16px; font-family: Calibri; font-weight: bold")
 
         # Create ticker input widget
         self.ticker_pd_input = QLineEdit(); self.ticker_pd_input.setFixedHeight(30)
         self.ticker_pd_input.setPlaceholderText("Ticker symbol...")
-        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Aller Display; border: none; border-bottom: 2px solid #999;")
+        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Calibri; border: none; border-bottom: 2px solid #999;")
 
         # Create prediction type button selection
         pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
@@ -316,8 +316,7 @@ class MainWindow(QMainWindow):
     # Called when start prediction button is clicked in right frame
     def predict(self):
         # Find ticker
-        ticker = self.ticker_pd_input.text()
-        print(ticker)
+        ticker = self.ticker_pd_input.text().upper()
         if not validate_ticker(ticker):
             QMessageBox.critical(self, "Error", "Invalid ticker"); return
         interval = next((btn.name for btn in self.btns["pd_type_btns"] if btn.isChecked()), None)
@@ -329,6 +328,7 @@ class MainWindow(QMainWindow):
         def prediction_complete(forecast_results):
             # Re-enable prediction settings and show results (TBD: to be developed further)
             self.pd_set_frame.setEnabled(True)
+            self.ticker_pd_input.setText("")
             results = "\n".join([f"FOR {time_key}:\n"
                                  f"-> Predicted Direction: {info['dir']}\n"
                                  f"-> Predicted Price: {info['price']} \n"

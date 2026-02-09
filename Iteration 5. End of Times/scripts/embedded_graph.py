@@ -5,7 +5,7 @@ import numpy as np
 from datetime import timedelta
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QInputDialog
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPen
 
 from load_data import load_data
 
@@ -59,22 +59,34 @@ class StockGraph:
 
         pos = event.scenePos()
         coord = self.ax.vb.mapSceneToView(pos)
-        x, y = coord.x(), coord.y()
+        x = coord.x()
+        y = coord.y()
+        print(x,y)
 
         if self.active_tool == 'line':
             self.line_points.append((x, y))
             if len(self.line_points) == 1:
+                print(1)
                 fplt.plot([x], [y], ax=self.ax, color='#ffffff', style='o')
 
             if len(self.line_points) == 2:
-                line = pd.Series([self.line_points[0][1], self.line_points[1][1]],
-                                 index=[self.line_points[0][0], self.line_points[1][0]])
-                fplt.plot(line, color='#ffffff', ax=self.ax)
+                print(2)
+                self.line_points.sort(key=lambda p: p[0])
+                line = fplt.add_line(self.line_points[0], self.line_points[1], color='#ffffff', ax=self.ax, width=2, interactive=True)
+
+                pen = QPen(QColor("#000000"))
+                pen.setWidth(2)
+                line.setPen(pen)
+                line.hoverPen = pen
+
+                fplt.refresh()
                 self.line_points = []
 
         elif self.active_tool == 'text':
             text, ok = QInputDialog.getText(self.parent, "Annotation", "Enter text:")
             if ok and text: fplt.add_text((x, y), text, color='#ffffff', ax=self.ax)
+
+        event.accept()
 
     def rebuild_self(self):
         self.ax.vb.win.setParent(None)
@@ -114,7 +126,8 @@ class StockGraph:
                 for candle in info['candle']: candle.hide()
             else: line_plot.hide()
 
-        self.update_keys_html(); fplt.refresh()
+        self.update_keys_html()
+        fplt.refresh()
 
     # Switch from line to candlestick and vice versa
     def switch_graph_type(self):
@@ -150,8 +163,12 @@ class StockGraph:
         except: pass
 
     # Recreates the graph with different time-period
-    def switch_graph_resolution(self):
-        self.resolution = self.parent.res_dropdown.currentText()
+    def switch_graph_resolution(self, res):
+        self.resolution = res
+        self.parent.res_dropdown.blockSignals(True)
+        index = self.parent.res_dropdown.findText(res)
+        self.parent.res_dropdown.setCurrentIndex(index)
+        self.parent.res_dropdown.blockSignals(False)
         self.parent.rebuild_graph()
 
     # Add a stock to the graph
@@ -205,14 +222,15 @@ class StockGraph:
 
     def add_future(self, ticker, interval, forecast_results):
         # Set graph settings to match prediction settings
-        if self.resolution != interval: self.switch_graph_resolution()
+        if self.resolution != interval: self.switch_graph_resolution(interval)
+        else: self.parent.rebuild_graph()
         if ticker not in self.loaded.keys(): self.add_ticker(ticker, replace=True)
 
         real_data = self.loaded[ticker][f"{self.resolution}df"]
 
         last_trade_date = real_data.index[-1]
         delta_type = "hours" if "h" in interval else "days"
-        period = "h" if "h" in interval else "d"
+        period = interval[1]
         current_price = float(real_data["Close"].iloc[-1])
 
         # Setup data to show "future" by 30 days

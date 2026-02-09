@@ -1,7 +1,6 @@
 
 # file imports
 import os
-os.environ["LOKY_MAX_CPU_COUNT"] = "1"
 import shutil
 import json
 import joblib
@@ -15,6 +14,7 @@ import yfinance as yf
 import talib
 from datetime import timedelta, datetime
 # machine learning models imports
+os.environ["LOKY_MAX_CPU_COUNT"] = "1"
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 from lightgbm import LGBMClassifier

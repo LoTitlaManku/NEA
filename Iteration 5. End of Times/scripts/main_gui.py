@@ -137,6 +137,9 @@ class MainWindow(QMainWindow):
         add_to_layout(update_layout, [self.update_label, self.update_progress])
         self.updater = UpdateManager(self.update_label, self.update_progress)
 
+        self.graph.add_ticker("AAPL")
+
+
         # Add top frame and graph container to center layout
         add_to_layout(center_layout, [top_layout, self.graph_container, update_layout], size_ratios=[1,15,2])
         return center_frame
@@ -223,7 +226,6 @@ class MainWindow(QMainWindow):
         self.main_layout.insertWidget(index, new, stretch)
 
     def rebuild_graph(self):
-        # Delete old graph
         self.graph_container.removeWidget(self.graph.ax.vb.win)
         self.graph.rebuild_self()
         self.graph_container.addWidget(self.graph.ax.vb.win)
@@ -251,7 +253,7 @@ class MainWindow(QMainWindow):
         self.graph.switch_graph_type()
 
     def switch_graph_res(self):
-        self.graph.switch_graph_resolution()
+        self.graph.switch_graph_resolution(self.res_dropdown.currentText())
 
     def switch_tool(self, tool: str):
         tool_name = tool.split("_")[0]

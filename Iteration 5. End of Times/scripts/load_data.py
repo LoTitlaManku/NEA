@@ -11,6 +11,13 @@ from tqdm import tqdm
 from datetime import datetime, timezone, time
 from time import sleep
 
+############################################################################
+
+# To find the absolute path of image files
+from scripts.config import IMG_DIR
+def abs_file(file: str) -> str:
+    return os.path.join(IMG_DIR, file).replace("\\", "/")
+
 # Helper function to load data for a stock
 def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     cache_file = os.path.join(CACHE_DIR, f"{ticker}_{interval}.csv")
@@ -29,7 +36,9 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     if data.empty: return None
 
     # Flattens columns if MultiIndex
-    if isinstance(data.columns, pd.MultiIndex): data.columns = data.columns.get_level_values(0)
+    if isinstance(data.columns, pd.MultiIndex):
+        cols: pd.MultiIndex = data.columns
+        data.columns = cols.get_level_values(0)
 
     # Strip timezones to avoid alignment errors later
     data.index = pd.to_datetime(data.index).tz_localize(None)
@@ -67,9 +76,9 @@ def validate_ticker(ticker: str) -> bool:
 
 class UpdateWorker(QThread):
     # Thread signals
-    progress_msg = pyqtSignal(str)
-    progress_val = pyqtSignal(int)
-    finished = pyqtSignal()
+    progress_msg: pyqtSignal = pyqtSignal(str)
+    progress_val: pyqtSignal = pyqtSignal(int)
+    updates_finished: pyqtSignal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -79,7 +88,7 @@ class UpdateWorker(QThread):
     def run(self):
         self.data_updater()
         self.check_accuracy()
-        self.finished.emit()
+        self.updates_finished.emit()
 
     def data_updater(self):
         files = os.listdir(CACHE_DIR)
@@ -106,7 +115,9 @@ class UpdateWorker(QThread):
                 self.progress_msg.emit(f"Updating: {file}")
                 self.progress_val.emit(int((len(processed) / len(files)) * 100))
 
-                self.update_data(file)
+                try: self.update_data(file)
+                except Exception as e: self.progress_msg.emit(f"Error for `{file}`: {str(e)}")
+
                 processed.add(file)
 
                 # Check for priority again after every file
@@ -115,47 +126,51 @@ class UpdateWorker(QThread):
 
         self.progress_msg.emit("Completed data update")
 
-    def update_data(self, filename: str):
-        try:
-            # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
-            name = os.path.splitext(filename)[0]
-            ticker, interval = name.rsplit("_", 1)
+    @staticmethod
+    def update_data(filename: str):
+        # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
+        name = os.path.splitext(filename)[0]
+        ticker, interval = name.rsplit("_", 1)
 
-            # Load existing cached stock data from file
-            cache_file = os.path.join(CACHE_DIR, filename)
-            df = load_data(ticker, interval)
+        # Load existing cached stock data from file
+        cache_file = os.path.join(CACHE_DIR, filename)
+        df = load_data(ticker, interval)
 
-            # Find time period for which data needs to be downloaded
-            time_diff = datetime.now() - df.index[-1]
-            period = str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
+        # Find time period for which data needs to be downloaded
+        time_diff = datetime.now() - df.index[-1]
+        period = str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
 
-            needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
-                            or (interval == "1d" and time_diff.days >= 1))
+        needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
+                        or (interval == "1d" and time_diff.days >= 1))
 
-            if needs_update:
-                # Fetch for the period that has passed
-                new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
-                if not new_data.empty:
-                    # Flatten columns if Multiindex and strip timezones to avoid alignment errors
-                    if isinstance(new_data.columns, pd.MultiIndex):
-                        new_data.columns = new_data.columns.get_level_values(0)
-                    new_data.index = pd.to_datetime(new_data.index).tz_localize(None)
+        if needs_update:
+            # Fetch for the period that has passed
+            new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
+            if not new_data.empty:
+                # Flatten columns if Multiindex and strip timezones to avoid alignment errors
+                if isinstance(new_data.columns, pd.MultiIndex):
+                    cols: pd.MultiIndex = new_data.columns
+                    new_data.columns = cols.get_level_values(0)
 
-                    # Append and save
-                    updated_df = pd.concat([df, new_data])
-                    updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
-                    updated_df.to_csv(cache_file)
+                new_data.index = pd.to_datetime(new_data.index).tz_localize(None)
 
-        except Exception as e:
-            self.progress_msg.emit(f"Error {ticker}: {str(e)}")
+                # Append and save
+                updated_df = pd.concat([df, new_data])
+                updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
+                updated_df.to_csv(cache_file)
+
 
     def check_accuracy(self):
         ledgers = os.listdir(LEDGER_DIR)
         for i, filename in enumerate(tqdm(ledgers, desc="Checking accuracy", unit="ledger")):
+            filename: str = filename
+
             self.progress_msg.emit(f"Checking Ledger: {filename}")
             self.progress_val.emit(int((i / len(ledgers)) * 100))
+
             ticker = filename.split("_")[0]
             self.validate_ledger(ticker, os.path.join(LEDGER_DIR, filename))
+
         self.progress_msg.emit("Completed ledger check")
         self.progress_val.emit(100)
 
@@ -163,7 +178,7 @@ class UpdateWorker(QThread):
     def validate_ledger(ticker: str, ledger_path: str):
         # Load ledger and find all entries that are unvalidated
         ledger = pd.read_csv(ledger_path)
-        NaNs = ledger['Actual_Price'].isna()
+        NaNs = ledger['Actual_Price'].isna() # noqa
         if not NaNs.any(): return
 
         # Load existing hourly and daily data for the stock

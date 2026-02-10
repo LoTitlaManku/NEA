@@ -128,7 +128,8 @@ def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
 
     # Create slider and label for value selected
     current_tolerance = parent.get_profile_data().get("data", {}).get("Risk tolerance", 4)
-    risk_slider = QSlider(Qt.Orientation.Horizontal); risk_slider.setStyleSheet("""QSlider {border: none}""")
+    risk_slider: QSlider = QSlider(Qt.Orientation.Horizontal)
+    risk_slider.setStyleSheet("""QSlider {border: none}""")
     risk_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     risk_slider.setMinimum(1); risk_slider.setMaximum(10); risk_slider.setTickInterval(1)
     risk_slider.setSingleStep(1); risk_slider.setValue(current_tolerance)
@@ -154,7 +155,7 @@ def create_slider_layout(parent: MainWindow | ProfileWindow) -> QVBoxLayout:
 
 # Helper class to make the circular label clickable
 class ClickableLabel(QLabel):
-    clicked = pyqtSignal()
+    clicked: pyqtSignal = pyqtSignal()
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton: self.clicked.emit()
         super().mouseReleaseEvent(event)

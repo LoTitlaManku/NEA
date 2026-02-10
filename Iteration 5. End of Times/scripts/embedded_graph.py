@@ -21,7 +21,7 @@ class StockGraph:
     def __init__(self, parent: MainWindow):
         # Define dictionaries for graph colours, and initialise other variables
         self.parent = parent
-        self.line_colours = ["#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#17becf"]
+        self.line_colours = ["#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#17b4cf"]
         self.candle_colours = [
             {"bull": "#00ff00", "bear": "#ff0000"},
             {"bull": "#ffff00", "bear": "#9467bd"},
@@ -208,7 +208,7 @@ class StockGraph:
 
         # To paint each horizon region a different colour
         paint_uncertain_zone(last_trade_date, forecast_results[1]['target_date'], '#00ff88')
-        paint_uncertain_zone(forecast_results[1]['target_date'], forecast_results[5]['target_date'], '#00ccff')
+        paint_uncertain_zone(forecast_results[1]['target_date'], forecast_results[5]['target_date'], '#0099ff')
         paint_uncertain_zone(forecast_results[5]['target_date'], forecast_results[21]['target_date'], '#ffcc00')
 
         # Plot outlines and actual prediction

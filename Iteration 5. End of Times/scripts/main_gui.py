@@ -11,12 +11,7 @@ from profile_gui import ProfileWindow
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
 from embedded_graph import StockGraph
 from predictor import TrainingWorker
-from load_data import UpdateManager, validate_ticker
-
-# To find the absolute path of image files
-import os
-from scripts.config import IMG_DIR
-def abs_file(file: str) -> str: return os.path.join(IMG_DIR, file).replace("\\", "/")
+from load_data import abs_file, validate_ticker, UpdateManager
 
 ############################################################################
 
@@ -28,16 +23,18 @@ class MainWindow(QMainWindow):
     # Containers
     graph_container: QVBoxLayout
     pd_set_frame: QFrame
-    # Input
+    # Inputs
     ticker_input: QLineEdit
     ticker_pd_input: QLineEdit
     ticker_list_widget: QComboBox
     type_dropdown: QComboBox
     res_dropdown: QComboBox
     risk_slider: QSlider
-    # Display
+    # Displays
     pd_result_label: QLabel
     keys_label: QLabel
+    update_label: QLabel
+    update_progress: QProgressBar
 
     def __init__(self):
         # Initialize the main window and dictionaries for button groups
@@ -166,7 +163,7 @@ class MainWindow(QMainWindow):
         add_to_layout(confirmations_layout,
             items=[
                 CustomButton("remove_pd_btn", "confirmation_btns", "indv", self, img=abs_file("delete.png"), width=70, height=70),
-                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm_icon_scaled.png"), width=70, height=70),
+                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm.png"), width=70, height=70),
             ]
         )
 
@@ -181,7 +178,7 @@ class MainWindow(QMainWindow):
         self.pd_result_label = QLabel()
         self.pd_result_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.pd_result_label.setWordWrap(True)
-        self.pd_result_label.setStyleSheet("border: none; font-size: 18px; font-family: calibri")
+        self.pd_result_label.setStyleSheet("border: none; font-size: 18px; font-family: Calibri")
         prediction_result_layout.addWidget(self.pd_result_label)
 
         # Add profile, prediction settings, and result frames to right frame
@@ -303,11 +300,11 @@ class MainWindow(QMainWindow):
             self.prediction_success(ticker, interval, forecast_results)
 
         self.thread = TrainingWorker(ticker, interval)
-        self.thread.finished.connect(prediction_complete)
-        self.thread.error.connect(self.prediction_fail)
+        self.thread.training_finished.connect(prediction_complete)
+        self.thread.training_error.connect(self.prediction_fail)
 
-        self.thread.finished.connect(self.thread.quit)
-        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.training_finished.connect(self.thread.quit)
+        self.thread.training_finished.connect(self.thread.deleteLater)
 
         self.thread.start()
 

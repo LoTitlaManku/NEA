@@ -33,8 +33,8 @@ warnings.filterwarnings("ignore") # Future warnings clog up console
 # Create separate thread for trainer so can run concurrently with gui
 class TrainingWorker(QThread):
     # Signal to send the results back to the GUI when finished
-    finished = pyqtSignal(dict)
-    error = pyqtSignal(str)
+    training_finished: pyqtSignal = pyqtSignal(dict)
+    training_error: pyqtSignal = pyqtSignal(str)
 
     def __init__(self, ticker, interval):
         super().__init__()
@@ -44,9 +44,9 @@ class TrainingWorker(QThread):
     def run(self):
         try:
             forecast_results = run_prediction_pipline(self.ticker, self.interval)
-            self.finished.emit(forecast_results)
+            self.training_finished.emit(forecast_results)
         except Exception as e:
-            self.error.emit(str(e))
+            self.training_error.emit(str(e))
 
 # Control and train models
 class TrainingManager:
@@ -66,12 +66,11 @@ class TrainingManager:
 
     # Calculate technical indicators
     def calculate_technical_indicators(self, df: pd.DataFrame, ticker: str, interval: str) -> pd.DataFrame:
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.droplevel(1)
-
         # Horizon (h) targets for selected period (p)
         p = "h" if "h" in interval else "d"
         for h in [1, 5, 21]:
-            df[f'target_cls_{h}{p}'] = (df['Close'].shift(-h) > df['Close']).astype(int)
+            # df[f'target_cls_{h}{p}'] = (df['Close'].shift(-h) > df['Close']).astype(int)
+            df[f'target_cls_{h}{p}'] = df['Close'].shift(-h).gt(df['Close']).astype(int)
             df[f'target_reg_{h}{p}'] = df['Close'].shift(-h)
 
         df['return'] = df['Close'].pct_change()

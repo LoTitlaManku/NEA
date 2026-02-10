@@ -1,28 +1,34 @@
 
+from __future__ import annotations
+
 import io
-import sys
+import os
 import json
 import matplotlib.pyplot as plt
 plt.ioff()
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QCursor, QImage
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
-                             QFileDialog, QWidget, QLabel, QFrame,  QDialog, QMenu, QLineEdit, QScrollArea)
+from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
+                             QFileDialog, QWidget, QLabel, QFrame, QDialog, QMenu, QLineEdit, QScrollArea, QSlider)
 
 from profile_control import Profile
-from load_data import peek_data, validate_ticker
+from load_data import abs_file, peek_data, validate_ticker
 from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
+from scripts.config import ICON_DIR
 
-# To find the absolute path of image files
-import os
-from scripts.config import IMG_DIR, ICON_DIR
-def abs_file(file): return str(os.path.join(IMG_DIR, file)).replace("\\", "/")
+# For type hinting
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main_gui import MainWindow
 
 ############################################################################
 
 class ProfileWindow(QDialog):
-    def __init__(self, parent_window: QMainWindow, profile_obj: Profile):
+    search_input: QLineEdit
+    risk_slider: QSlider
+
+    def __init__(self, parent_window: MainWindow, profile_obj: Profile):
         # Initialize the main window and dictionaries for button groups
         super().__init__(parent_window)
         self.setWindowTitle(f"Profile Management - {profile_obj.get_username()}")
@@ -66,7 +72,7 @@ class ProfileWindow(QDialog):
         edit_layout.setSpacing(0)
 
         edit_btns = [("logout_btn", abs_file("logout.png")),
-                     ("change_profile_btn", abs_file("change_profile_icon.png")),
+                     ("change_profile_btn", abs_file("change_profile.png")),
                      ("export_data_btn", abs_file("export_data.png")),
                      ("import_data_btn", abs_file("import_data.png")),
                      ("delete_profile_btn", abs_file("delete.png"))  ]
@@ -135,9 +141,10 @@ class ProfileWindow(QDialog):
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search for a stock..."); self.search_input.setFixedHeight(40)
         self.search_input.setStyleSheet("border: 1px solid black; padding-left: 10px;")
+        self.search_input.returnPressed.connect(self.add_stock)
 
         confirm_btn = CustomButton("search_confirm_btn", "Na", "indv", parent=self,
-                                   img=abs_file("confirm_icon_scaled.png"), width=60, height=40)
+                                   img=abs_file("confirm.png"), width=60, height=40)
         confirm_btn.setProperty("BorderBlank", "true")
         confirm_btn.style().unpolish(confirm_btn); confirm_btn.style().polish(confirm_btn)
         add_to_layout(search_layout, [self.search_input, confirm_btn])
@@ -164,10 +171,10 @@ class ProfileWindow(QDialog):
         return bottom_frame
 
     # Helper function to create a detailed stock card
-    def create_stock_card(self, ticker: str, index: int) -> QFrame:
+    def create_stock_card(self, ticker: str, index: int) -> QFrame | None:
         # Find latest 30 days of data
         df = peek_data(ticker, 30, "1d")
-        if df is None: return
+        if df is None: return None
 
         # Get price change
         last_price, now_price = df.iloc[0]['Close'], df.iloc[-1]['Close']
@@ -405,18 +412,4 @@ class ProfileWindow(QDialog):
         self.parent_window.show()
 
 ############################################################################
-
-if __name__ == "__main__":
-    # from profile import DataManager
-    # p = DataManager().get_profile("/", "/")
-    # p.update_data({"Saved stocks": ["AAPL", "TSLA", "NVDA"]})
-    from main_gui import MainWindow
-
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
-
-
-
 

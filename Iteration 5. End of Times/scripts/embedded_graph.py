@@ -1,28 +1,24 @@
 
+from __future__ import annotations
+
 import finplot as fplt
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QMainWindow, QInputDialog
-from PyQt6.QtGui import QColor, QPen
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QColor
 
 from load_data import load_data
 
+# For type hinting
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main_gui import MainWindow
+
 ############################################################################
 
-# Helper function to delete finplot items
-def safe_delete(item):
-    try: item.delete()
-    except:
-        try: item.remove()
-        except:
-            try: item.hide()
-            except: pass
-
-
 class StockGraph:
-    def __init__(self, parent: QMainWindow):
+    def __init__(self, parent: MainWindow):
         # Define dictionaries for graph colours, and initialise other variables
         self.parent = parent
         self.line_colours = ["#1f77b4", "#ff7f0e", "#d62728", "#9467bd", "#17becf"]
@@ -32,61 +28,13 @@ class StockGraph:
             {"bull": "#3486eb", "bear": "#2b2b2b"}
         ]
         self.loaded = {}
-        self.selected_type = "line"
+        self.selected_type = "Line"
         self.resolution = "1d"
         self.saved_view = None
-        self.active_tool = "mouse"
-        self.line_points = []
-
-        self.keys_html = ""
 
         # Create the graph and edit its visuals
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
         self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
-        self.ax.vb.scene().sigMouseClicked.connect(self.on_plot_click)
-
-    def _update_mouse_mode(self):
-        enabled = self.active_tool == "mouse"
-        self.ax.vb.setMouseEnabled(x=enabled, y=enabled)
-
-    def select_tool(self, tool: str):
-        self.active_tool = tool
-        self.line_points = []
-        self._update_mouse_mode()
-
-    def on_plot_click(self, event):
-        if self.active_tool == "mouse" or event.button() != Qt.MouseButton.LeftButton: return
-
-        pos = event.scenePos()
-        coord = self.ax.vb.mapSceneToView(pos)
-        x = coord.x()
-        y = coord.y()
-        print(x,y)
-
-        if self.active_tool == 'line':
-            self.line_points.append((x, y))
-            if len(self.line_points) == 1:
-                print(1)
-                fplt.plot([x], [y], ax=self.ax, color='#ffffff', style='o')
-
-            if len(self.line_points) == 2:
-                print(2)
-                self.line_points.sort(key=lambda p: p[0])
-                line = fplt.add_line(self.line_points[0], self.line_points[1], color='#ffffff', ax=self.ax, width=2, interactive=True)
-
-                pen = QPen(QColor("#000000"))
-                pen.setWidth(2)
-                line.setPen(pen)
-                line.hoverPen = pen
-
-                fplt.refresh()
-                self.line_points = []
-
-        elif self.active_tool == 'text':
-            text, ok = QInputDialog.getText(self.parent, "Annotation", "Enter text:")
-            if ok and text: fplt.add_text((x, y), text, color='#ffffff', ax=self.ax)
-
-        event.accept()
 
     def rebuild_self(self):
         self.ax.vb.win.setParent(None)
@@ -96,7 +44,6 @@ class StockGraph:
         # Create a new graph widget
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
         self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
-        self.ax.vb.scene().sigMouseClicked.connect(self.on_plot_click)
 
         # Iterate through every loaded stock, and re-add them to the graph
         for ticker, info in self.loaded.items():
@@ -118,12 +65,12 @@ class StockGraph:
             })
 
             # Update the dictionary with new plot
-            info['candle'] = candle_items if isinstance(candle_items, list) else [candle_items]
-            info['line'] = line_plot if isinstance(line_plot, list) else [line_plot]
+            info['Candle'] = candle_items if isinstance(candle_items, list) else [candle_items]
+            info['Line'] = line_plot if isinstance(line_plot, list) else [line_plot]
 
             # Hide not-selected
-            if self.selected_type == "line":
-                for candle in info['candle']: candle.hide()
+            if self.selected_type == "Line":
+                for candle in info['Candle']: candle.hide()
             else: line_plot.hide()
 
         self.update_keys_html()
@@ -135,19 +82,19 @@ class StockGraph:
         try:
             vr = self.ax.vb.viewRange()
             self.saved_view = ([float(vr[0][0]), float(vr[0][1])], [float(vr[1][0]), float(vr[1][1])])
+            print(self.saved_view)
         except: self.saved_view = None
 
-        # self.selected_type = "candle" if self.selected_type == "line" else "line"
         self.selected_type = self.parent.type_dropdown.currentText()
 
         # Hide all items not part of selected graph type
         for info in self.loaded.values():
-            for point in info.get("line", []):
+            for point in info.get("Line", []):
                 try:
                     if self.selected_type == "Line": point.show()
                     else: point.hide()
                 except: pass
-            for candle in info.get("candle", []):
+            for candle in info.get("Candle", []):
                 try:
                     if self.selected_type == "Candle": candle.show()
                     else: candle.hide()
@@ -159,7 +106,7 @@ class StockGraph:
         # Try to restore the previous view
         if not self.saved_view: return
         xr, yr = self.saved_view
-        try: self.ax.vb.setRange(xRange=xr, yRange=None, padding=0)
+        try: self.ax.vb.setRange(xRange=xr, yRange=yr, padding=0)
         except: pass
 
     # Recreates the graph with different time-period
@@ -174,10 +121,10 @@ class StockGraph:
     # Add a stock to the graph
     def add_ticker(self, ticker: str, replace: bool = False) -> str:
         if ticker in self.loaded: return f"{ticker} already added"
-        if len(self.loaded) >= 3 and replace:
-            self.remove_ticker(self.loaded.popitem()[0])
-        elif len(self.loaded) >= 3 and not replace:
-            return "Cannot load more than 3 tickers"
+
+        if len(self.loaded) >= 3:
+            if replace: self.remove_ticker(self.loaded.popitem()[0])
+            else: return "Cannot load more than 3 tickers"
 
         self.parent.updater.prioritize(ticker)
         QApplication.processEvents()
@@ -206,18 +153,21 @@ class StockGraph:
         # Update the dictionary of loaded tickers
         self.loaded[ticker] = {
             f"{self.resolution}df": data,
-            "line": line_plot if isinstance(line_plot, list) else [line_plot],
-            "candle": candle_items if isinstance(candle_items, list) else [candle_items],
+            "Line": line_plot if isinstance(line_plot, list) else [line_plot],
+            "Candle": candle_items if isinstance(candle_items, list) else [candle_items],
             "colour_index": colour_index
         }
         self.parent.ticker_list_widget.addItem(ticker)
 
         # Hides the type of the graph that is not selected
-        if self.selected_type == "line":
-            for candle in self.loaded[ticker]['candle']: candle.hide()
+        if self.selected_type == "Line":
+            for candle in self.loaded[ticker]['Candle']: candle.hide()
         else: line_plot.hide()
 
         self.update_keys_html()
+        if len(self.loaded) == 1:
+            self.ax.vb.setRange(xRange=[0, 100000], yRange=[0,max(data["Close"])], padding=0)
+        else: self.ax.vb.autoRange()
         return "success"
 
     def add_future(self, ticker, interval, forecast_results):
@@ -282,18 +232,17 @@ class StockGraph:
 
     # Helper function to update colour keys for graph
     def update_keys_html(self):
-        if not self.loaded:
-            self.keys_html = ""; return
+        if not self.loaded: self.parent.keys_label.setText(""); return
 
         # Iterate through every loaded stock and add its colour code to a html format string
         parts = []
         for ticker, info in self.loaded.items():
-            if self.selected_type == "line":
+            if self.selected_type == "Line":
                 # If line type, single colour key
                 line_colour = self.line_colours[info["colour_index"]]
                 parts.append(f"<span style='display:inline-block; padding:2px 6px; background:{line_colour};"
                              f"color:#fff; border-radius:3px; margin-right:6px;'>{ticker}</span>")
-            elif self.selected_type == "candle":
+            elif self.selected_type == "Candle":
                 # If candle type, double colour key for close gain and close loss
                 candle_colour = self.candle_colours[info.get("colour_index")]
                 parts.append(f"""
@@ -305,8 +254,8 @@ class StockGraph:
                              color:{candle_colour['bear']}; border-radius:3px; margin-right:6px;">---</span>
                 """)
 
-        self.keys_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"
-        self.parent.keys_label.setText(self.keys_html)
+        keys_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"
+        self.parent.keys_label.setText(keys_html)
 
 
 if __name__ == "__main__":

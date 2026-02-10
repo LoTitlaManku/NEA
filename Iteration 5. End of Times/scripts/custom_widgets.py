@@ -33,9 +33,6 @@ class CustomButton(QPushButton):
         # Logic map for name of button to function call on click
         self.actions: dict[str, Callable] = {
             # MainWindow
-            "mouse_tool": lambda: self.parent.switch_tool(self.name),
-            "line_tool": lambda: self.parent.switch_tool(self.name),
-            "notes_tool": lambda: self.parent.switch_tool(self.name),
             "save_graph_btn": lambda: self.parent.show_graph_save_popup(self),
             "predict_btn": lambda: self.parent.predict(),
             "remove_pd_btn": lambda: self.parent.rebuild_graph(),
@@ -79,6 +76,12 @@ class CustomButton(QPushButton):
         action: Optional[Callable] = self.actions.get(self.name)
         if action: action()
         else: print(f"No specific action defined for {self.name}")
+
+    # External call function to reset a button to its initial state
+    def reset(self):
+        self.setChecked(False)
+        self.setEnabled(True)
+        self.update_appearance(is_active=False)
 
     # Initialize basic button styling
     def init_appearance(self) -> None:

@@ -1,5 +1,6 @@
 
 import sys
+import numpy as np
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
@@ -35,7 +36,7 @@ class MainWindow(QMainWindow):
     res_dropdown: QComboBox
     risk_slider: QSlider
     # Display
-    prediction_result_label: QLabel
+    pd_result_label: QLabel
     keys_label: QLabel
 
     def __init__(self):
@@ -57,32 +58,10 @@ class MainWindow(QMainWindow):
         # Set up the main layout and save to dict for reframing later
         central = QWidget(); self.setCentralWidget(central)
         self.main_layout = QHBoxLayout(); central.setLayout(self.main_layout)
-        self.main_frames = {"left": [self.build_left_frame(), 1],
-                            "center": [self.build_center_frame(), 15],
+        self.main_frames = {"center": [self.build_center_frame(), 15],
                             "right": [self.build_right_frame(), 3]}
         items, sizes = zip(*self.main_frames.values())
         add_to_layout(self.main_layout, items, size_ratios=sizes)
-
-    # Initialize the left sidebar with tool buttons
-    def build_left_frame(self) -> QFrame:
-        # Main frame styling
-        left_frame = QFrame(); left_frame.setStyleSheet("border: 1px solid black;")
-        left_layout = QVBoxLayout(left_frame); left_layout.setContentsMargins(0 ,0 ,0 ,0)
-        left_layout.setSpacing(0)
-
-        # Create tool buttons with the custom class and add to left frame
-        add_to_layout(
-            left_layout, stretches=[-1],
-            items=[
-                CustomButton(name, "left_btns", "img_grp", parent=self, img=img, height=100)
-                for name, img in [
-                    ("mouse_tool", abs_file("mouse_icon_scaled.png")),
-                    ("line_tool", abs_file("line_icon_scaled.png")),
-                    ("notes_tool", abs_file("notes_icon_scaled.png"))
-                ]
-            ]
-        )
-        return left_frame
 
     # Initialize the center frame with top bar and graph area
     def build_center_frame(self) -> QFrame:
@@ -113,8 +92,7 @@ class MainWindow(QMainWindow):
                 CustomButton("add_stock_btn", "top_btns", "indv", self, text="Add Ticker", height=15),
                 QLabel("Loaded:"), self.ticker_list_widget,
                 CustomButton("remove_stock_btn", "top_btns", "indv", self, text="Remove Ticker", height=15),
-                self.type_dropdown, self.res_dropdown,
-                CustomButton("save_graph_btn", "top_btns", "indv", self, img=abs_file("save.png"), height=30),
+                self.type_dropdown, self.res_dropdown
             ]
         )
 
@@ -198,19 +176,16 @@ class MainWindow(QMainWindow):
             items=[prediction_label, self.ticker_pd_input, pd_type_layout, create_slider_layout(self), confirmations_layout]
         )
 
-        # Create prediction result widget (TBD: to be developed further)
         prediction_result_frame = QFrame(); prediction_result_frame.setStyleSheet("border: 1px solid black")
         prediction_result_layout = QVBoxLayout(prediction_result_frame)
-        self.prediction_result_label = QLabel("Prediction result")
-        self.prediction_result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.prediction_result_label.setWordWrap(True)
-        self.prediction_result_label.setStyleSheet("border: none")
-        prediction_result_layout.addWidget(self.prediction_result_label)
+        self.pd_result_label = QLabel()
+        self.pd_result_label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.pd_result_label.setWordWrap(True)
+        self.pd_result_label.setStyleSheet("border: none; font-size: 18px; font-family: calibri")
+        prediction_result_layout.addWidget(self.pd_result_label)
 
         # Add profile, prediction settings, and result frames to right frame
-        add_to_layout(right_layout,
-                      [profile_frame, self.pd_set_frame, prediction_result_frame],
-                      size_ratios=[1,10,10])
+        add_to_layout(right_layout, [profile_frame, self.pd_set_frame, prediction_result_frame], size_ratios=[1,10,10])
         return right_frame
 
     # Helper function to rebuild a select main frame
@@ -254,10 +229,6 @@ class MainWindow(QMainWindow):
 
     def switch_graph_res(self):
         self.graph.switch_graph_resolution(self.res_dropdown.currentText())
-
-    def switch_tool(self, tool: str):
-        tool_name = tool.split("_")[0]
-        self.graph.select_tool(tool_name)
 
     # Called when the profile label is clicked
     def label_click(self) -> None:
@@ -322,23 +293,14 @@ class MainWindow(QMainWindow):
         if not validate_ticker(ticker):
             QMessageBox.critical(self, "Error", "Invalid ticker"); return
         interval = next((btn.name for btn in self.btns["pd_type_btns"] if btn.isChecked()), None)
+        for btn in self.btns["pd_type_btns"]: btn.reset()
 
         # Disable frame for inputs while prediction is being processed
         self.pd_set_frame.setEnabled(False)
-        self.prediction_result_label.setText("Processing...")
+        self.pd_result_label.setText("Processing...")
 
         def prediction_complete(forecast_results):
-            # Re-enable prediction settings and show results (TBD: to be developed further)
-            self.pd_set_frame.setEnabled(True)
-            self.ticker_pd_input.setText("")
-            results = "\n".join([f"FOR {time_key}:\n"
-                                 f"-> Predicted Direction: {info['dir']}\n"
-                                 f"-> Predicted Price: {info['price']} \n"
-                                 f"-> Confidence: {round(info['conf']*100,1)}%"
-                                  for time_key, info in forecast_results.items()])
-            self.prediction_result_label.setText(results)
-            self.res_dropdown.setCurrentText(f"1{interval[0]}")
-            self.graph.add_future(ticker, interval, forecast_results)
+            self.prediction_success(ticker, interval, forecast_results)
 
         self.thread = TrainingWorker(ticker, interval)
         self.thread.finished.connect(prediction_complete)
@@ -349,9 +311,29 @@ class MainWindow(QMainWindow):
 
         self.thread.start()
 
+    def prediction_success(self, ticker, interval, forecast_results):
+        self.pd_set_frame.setEnabled(True)
+        self.ticker_pd_input.setText("")
+
+        # Calculate a threshold for confidence needed to display to user
+        risk_level = self.risk_slider.value()
+        threshold = 0.5 + 0.35 * np.exp(-0.4 * (risk_level - 1))
+
+        results = []
+        for time_key, info in forecast_results.items():
+            confidence = info['conf']
+            results.append(f"<u>For {time_key}{interval[1]}:</u><b> {'️⚠️ Low confidence!' if confidence < threshold else ''}</b><br>"
+                           f"-> Direction: {info['dir']}<br>"
+                           f"-> Price: ${info['price']:.2f}<br>"
+                           f"-> Confidence: {confidence:.1%}")
+
+        self.res_dropdown.setCurrentText(f"1{interval[0]}")
+        self.graph.add_future(ticker, interval, forecast_results)
+        self.pd_result_label.setText("<br>".join(results))
+
     def prediction_fail(self, error):
         self.pd_set_frame.setEnabled(True)
-        self.prediction_result_label.setText(f"Prediction Failed: {error}")
+        self.pd_result_label.setText(f"Prediction Failed: {error}")
 
 
     # Called when save graph button is clicked (TBD: to be developed further)

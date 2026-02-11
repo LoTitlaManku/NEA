@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 ############################################################################
 
+# Class for graph object
 class StockGraph:
     def __init__(self, parent: MainWindow):
         # Define dictionaries for graph colours, and initialise other variables
@@ -34,9 +35,12 @@ class StockGraph:
 
         # Create the graph and edit its visuals
         self.ax = fplt.create_plot(title="Stocks", init_zoom_periods=200)
-        self.ax.showGrid(x=True, alpha=0.2); self.ax.showAxis('left'); self.ax.hideAxis('right')
+        self.ax.showGrid(x=True, alpha=0.2)
+        self.ax.showAxis('left'); self.ax.hideAxis('right')
 
-    def rebuild_self(self):
+    # Helper function to recreate a new graph
+    def rebuild_self(self) -> None:
+        # Delete current axis object
         self.ax.vb.win.setParent(None)
         del self.ax
         QApplication.processEvents()
@@ -47,7 +51,7 @@ class StockGraph:
 
         # Iterate through every loaded stock, and re-add them to the graph
         for ticker, info in self.loaded.items():
-            df = info.get(f"{self.resolution}df", None)
+            df = info.get(f"{self.resolution}_df", None)
             if df is None:
                 df = load_data(ticker, self.resolution)
                 self.loaded[ticker][f"{self.resolution}df"] = df
@@ -76,13 +80,12 @@ class StockGraph:
         self.update_keys_html()
         fplt.refresh()
 
-    # Switch from line to candlestick and vice versa
-    def switch_graph_type(self):
-        # Save current viewing range to maintain same position upon view
+    # Helper function to switch between candlestick and line graph types
+    def switch_graph_type(self) -> None:
+        # Save current viewing range to maintain same position
         try:
             vr = self.ax.vb.viewRange()
             self.saved_view = ([float(vr[0][0]), float(vr[0][1])], [float(vr[1][0]), float(vr[1][1])])
-            print(self.saved_view)
         except: self.saved_view = None
 
         self.selected_type = self.parent.type_dropdown.currentText()
@@ -94,6 +97,7 @@ class StockGraph:
                     if self.selected_type == "Line": point.show()
                     else: point.hide()
                 except: pass
+
             for candle in info.get("Candle", []):
                 try:
                     if self.selected_type == "Candle": candle.show()
@@ -105,31 +109,37 @@ class StockGraph:
 
         # Try to restore the previous view
         if not self.saved_view: return
+
         xr, yr = self.saved_view
         try: self.ax.vb.setRange(xRange=xr, yRange=yr, padding=0)
         except: pass
 
-    # Recreates the graph with different time-period
-    def switch_graph_resolution(self, res):
+    # Helper function to switch time-period for plotted data
+    def switch_graph_resolution(self, res: str) -> None:
+        # Get current resolution
         self.resolution = res
         self.parent.res_dropdown.blockSignals(True)
+        # Update to new resolution
         index = self.parent.res_dropdown.findText(res)
         self.parent.res_dropdown.setCurrentIndex(index)
+        # Rebuild graph on new resolution
         self.parent.res_dropdown.blockSignals(False)
         self.parent.rebuild_graph()
 
-    # Add a stock to the graph
+    # Helper function to add a stock to the graph
     def add_ticker(self, ticker: str, replace: bool = False) -> str:
         if ticker in self.loaded: return f"{ticker} already added"
 
+        # Check if new ticker takes priority on graph
         if len(self.loaded) >= 3:
             if replace: self.remove_ticker(self.loaded.popitem()[0])
             else: return "Cannot load more than 3 tickers"
 
+        # Ensure cache is up-to-date for that ticker
         self.parent.updater.prioritize(ticker)
         QApplication.processEvents()
 
-        # Loads the data and checks that it's valid
+        # Load the data and check that it's valid
         data = load_data(ticker, self.resolution)
         if data is None or data.empty: return "No data or invalid ticker"
 
@@ -137,12 +147,13 @@ class StockGraph:
         used_colours = {info["colour_index"] for info in self.loaded.values()}
         colour_index = next((i for i in range(len(self.line_colours)) if i not in used_colours), 0)
         line_colour, candle_color = self.line_colours[colour_index], self.candle_colours[colour_index]
-        fplt.candle_bear_color, fplt.candle_bull_color = None, None
 
         # Create both the candle and line versions of the graphs
         line_plot = fplt.plot(data["Close"], ax=self.ax, color=line_colour, width=2, legend=None)
         candle_items = fplt.candlestick_ochl(data[["Open", "Close", "High", "Low"]], ax=self.ax, candle_width=0.6)
 
+        # Set colour of the candlesticks
+        fplt.candle_bear_color, fplt.candle_bull_color = None, None
         candle_items.colors.update({
             'bull_body': candle_color["bull"],
             'bull_shadow': candle_color["bull"],
@@ -159,28 +170,31 @@ class StockGraph:
         }
         self.parent.ticker_list_widget.addItem(ticker)
 
-        # Hides the type of the graph that is not selected
+        # Hide which type is not selected
         if self.selected_type == "Line":
             for candle in self.loaded[ticker]['Candle']: candle.hide()
         else: line_plot.hide()
 
+        # Update key and restore view
         self.update_keys_html()
         if len(self.loaded) == 1:
             self.ax.vb.setRange(xRange=[0, 100000], yRange=[0,max(data["Close"])], padding=0)
         else: self.ax.vb.autoRange()
+
         return "success"
 
-    def add_future(self, ticker, interval, forecast_results):
+    # Helper function to plot result of predictor
+    def add_future(self, ticker: str, interval: str, forecast_results: dict) -> None:
         # Set graph settings to match prediction settings
         if self.resolution != interval: self.switch_graph_resolution(interval)
         else: self.parent.rebuild_graph()
         if ticker not in self.loaded.keys(): self.add_ticker(ticker, replace=True)
 
+        # Get data and information
         real_data = self.loaded[ticker][f"{self.resolution}df"]
-
         last_trade_date = real_data.index[-1]
-        delta_type = "hours" if "h" in interval else "days"
         period = interval[1]
+        delta_type = "hours" if period == "h" else "days"
         current_price = float(real_data["Close"].iloc[-1])
 
         # Setup data to show "future" by 30 days
@@ -196,7 +210,7 @@ class StockGraph:
 
         tline_mid, tline_up, tline_lo = create_forecast_path('price'), create_forecast_path('up'), create_forecast_path('lo')
 
-        # Shading for uncertain areas
+        # Helper to shade areas between lines
         def paint_uncertain_zone(start_date, end_date, colour):
             s_up = tline_up.loc[start_date:end_date]
             if len(s_up) > 1:
@@ -206,7 +220,7 @@ class StockGraph:
                 fill_colour.setAlphaF(0.2)
                 fplt.fill_between(upper_anchor, lower_anchor, color=fill_colour)
 
-        # To paint each horizon region a different colour
+        # Paint each horizon region for uncertainty
         paint_uncertain_zone(last_trade_date, forecast_results[1]['target_date'], '#00ff88')
         paint_uncertain_zone(forecast_results[1]['target_date'], forecast_results[5]['target_date'], '#0099ff')
         paint_uncertain_zone(forecast_results[5]['target_date'], forecast_results[21]['target_date'], '#ffcc00')
@@ -216,22 +230,22 @@ class StockGraph:
         fplt.plot(tline_lo, ax=self.ax, color='#bbbbbb', width=0.5)
         fplt.plot(tline_mid, ax=self.ax, color='#000000', style='--', width=2)
 
-        for_dates = {1: '1H', 5: '5H', 21: '21H'} if "h" in interval else {1: '1D', 5: '1W', 21: '1M'}
-        for days, label in for_dates.items():
-            fplt.add_text((forecast_results[days]['target_date'], forecast_results[days]['price']),
-                          f"{label}: ${forecast_results[days]['price']:.2f}", color='#ffffff')
-
+    # Helper function to remove a stock from graph
     def remove_ticker(self, ticker: str) -> str:
+        # Validation on ticker
         if not ticker: return "No ticker selected"
         if ticker not in self.loaded: return "Ticker not loaded"
 
+        # Delete the entry and rebuild the graph without it
         del self.loaded[ticker]
         self.parent.rebuild_graph()
-        self.parent.ticker_list_widget.removeItem(self.parent.ticker_list_widget.findText(ticker))
+
+        list_index = self.parent.ticker_list_widget.findText(ticker)
+        self.parent.ticker_list_widget.removeItem(list_index)
         return "Success"
 
     # Helper function to update colour keys for graph
-    def update_keys_html(self):
+    def update_keys_html(self) -> None:
         if not self.loaded: self.parent.keys_label.setText(""); return
 
         # Iterate through every loaded stock and add its colour code to a html format string
@@ -254,9 +268,7 @@ class StockGraph:
                              color:{candle_colour['bear']}; border-radius:3px; margin-right:6px;">---</span>
                 """)
 
+        # Set the label to the html style
         keys_html = '<div style="text-align: right;">' + " ".join(parts) + "</div>"
         self.parent.keys_label.setText(keys_html)
 
-
-if __name__ == "__main__":
-    print("Wrong")

@@ -1,3 +1,5 @@
 move rebuild_frame function to custom widgets file and rename "custom widget controls"
 
 carbon set width to fixed 1100
+
+ask sir about semicolons in python. is there mark downs for readability?

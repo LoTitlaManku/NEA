@@ -153,8 +153,8 @@ class MainWindow(QMainWindow):
         pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
         add_to_layout(pd_type_layout,
             items=[
-                CustomButton("1d", "pd_type_btns", "text_grp", self, text="day", width=75, height=15),
-                CustomButton("1h", "pd_type_btns", "text_grp", self, text="hour", width=75, height=15),
+                CustomButton("1d", "pd_type_btns", "grp", self, text="day", width=75, height=15),
+                CustomButton("1h", "pd_type_btns", "grp", self, text="hour", width=75, height=15),
             ]
         )
 

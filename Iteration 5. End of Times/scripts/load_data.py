@@ -132,6 +132,10 @@ class UpdateWorker(QThread):
         name = os.path.splitext(filename)[0]
         ticker, interval = name.rsplit("_", 1)
 
+        seconds_map = {"m": 60, "h": 3600, "d": 86400}
+        unit, value = ''.join(filter(str.isalpha, interval)), int(''.join(filter(str.isdigit, interval)))
+        interval_seconds = seconds_map[unit] * value
+
         # Load existing cached stock data from file
         cache_file = os.path.join(CACHE_DIR, filename)
         df = load_data(ticker, interval)
@@ -140,9 +144,7 @@ class UpdateWorker(QThread):
         time_diff = datetime.now() - df.index[-1]
         period = str(int(min(time_diff.total_seconds() // 86400 + 5, 700))) + "d"
 
-        needs_update = ((interval == "1h" and time_diff.total_seconds() >= 3600)
-                        or (interval == "1d" and time_diff.days >= 1))
-
+        needs_update = (time_diff.total_seconds() >= interval_seconds)
         if needs_update:
             # Fetch for the period that has passed
             new_data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)

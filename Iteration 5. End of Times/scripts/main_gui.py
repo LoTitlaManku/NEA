@@ -43,8 +43,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(abs_file("stocks.png")))
         self.setGeometry(100, 100, 1500, 900)
         self.setStyleSheet("QWidget {background-color: white; color: black;}")
-        self.btns = {"left_btns": [], "top_btns": [], "pd_type_btns": [],
-                     "time_period_btns": [], "confirmation_btns": []}
+        self.btns = {"top_btns": [], "pd_type_btns": [], "confirmation_btns": []}
 
         # Initialize the profile logic
         self.data_manager = DataManager()
@@ -55,8 +54,8 @@ class MainWindow(QMainWindow):
         # Set up the main layout and save to dict for reframing later
         central = QWidget(); self.setCentralWidget(central)
         self.main_layout = QHBoxLayout(); central.setLayout(self.main_layout)
-        self.main_frames = {"center": [self.build_center_frame(), 15],
-                            "right": [self.build_right_frame(), 3]}
+
+        self.main_frames = {"center": [self.build_center_frame(), 15], "right": [self.build_right_frame(), 3]}
         items, sizes = zip(*self.main_frames.values())
         add_to_layout(self.main_layout, items, size_ratios=sizes)
 
@@ -83,6 +82,7 @@ class MainWindow(QMainWindow):
         self.res_dropdown.setCurrentText("1d")
         self.res_dropdown.currentTextChanged.connect(self.switch_graph_res)
 
+        # Add items to top layout
         add_to_layout(btn_layout,
             items=[
                 QLabel("Ticker:"), self.ticker_input,
@@ -93,27 +93,22 @@ class MainWindow(QMainWindow):
             ]
         )
 
+        # Key label for html string
         self.keys_label = QLabel(""); self.keys_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         add_to_layout(top_layout, [btn_layout, self.keys_label])
 
-        # Graph
+        # Graph container
         self.graph_container = QVBoxLayout()
         self.graph = StockGraph(self)
         self.graph_container.addWidget(self.graph.ax.vb.win)
 
         # Updater visuals
         update_layout = QHBoxLayout()
-
-        self.update_label = QLabel()
-        self.update_progress = QProgressBar()
-        self.update_progress.setMinimumHeight(10)
-        self.update_progress.setTextVisible(False)
+        self.update_label = QLabel(); self.update_progress = QProgressBar()
+        self.update_progress.setMinimumHeight(10); self.update_progress.setTextVisible(False)
 
         add_to_layout(update_layout, [self.update_label, self.update_progress])
         self.updater = UpdateManager(self.update_label, self.update_progress)
-
-        self.graph.add_ticker("AAPL")
-
 
         # Add top frame and graph container to center layout
         add_to_layout(center_layout, [top_layout, self.graph_container, update_layout], size_ratios=[1,15,2])
@@ -130,26 +125,27 @@ class MainWindow(QMainWindow):
         profile_frame_layout = QVBoxLayout(profile_frame)
         profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Create profile image icon and logging label and add to profile frame
+        # Create profile image icon & logging label and add to profile frame
         desc = "Click to log in" if not self.logged_in else "Click to switch to profile overview window"
-        add_to_layout(profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
-                      items=[create_circle_label(self, clickable=True, diameter=120, desc=desc, border=self.logged_in),
-                             self.status_label])
+        add_to_layout(
+            profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
+            items=[create_circle_label(self, diameter=120, desc=desc, border=self.logged_in), self.status_label]
+        )
 
         # Prediction settings frame styling (pd_set = prediction_settings)
         self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
         pd_set_layout = QVBoxLayout(self.pd_set_frame); pd_set_layout.setContentsMargins(3 ,3 ,3 ,3)
         pd_set_layout.setSpacing(20)
 
-        prediction_label = QLabel("Prediction settings:")
-        prediction_label.setStyleSheet("border: none; font-size: 16px; font-family: Calibri; font-weight: bold")
+        pd_label = QLabel("Prediction settings:")
+        pd_label.setStyleSheet("border: none; font-size: 16px; font-family: Calibri; font-weight: bold")
 
-        # Create ticker input widget
+        # Ticker input widget
         self.ticker_pd_input = QLineEdit(); self.ticker_pd_input.setFixedHeight(30)
         self.ticker_pd_input.setPlaceholderText("Ticker symbol...")
-        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Calibri; border: none; border-bottom: 2px solid #999;")
+        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Calibri; border: none; border-bottom: 2px solid #999")
 
-        # Create prediction type button selection
+        # Prediction type button selection
         pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
         add_to_layout(pd_type_layout,
             items=[
@@ -158,31 +154,31 @@ class MainWindow(QMainWindow):
             ]
         )
 
-        # Create confirmation and redo buttons
+        # Confirmation and remove prediction buttons
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50)
         add_to_layout(confirmations_layout,
             items=[
-                CustomButton("remove_pd_btn", "confirmation_btns", "indv", self, img=abs_file("delete.png"), width=70, height=70),
-                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm.png"), width=70, height=70),
+                CustomButton("remove_pd_btn", "confirmation_btns", "indv", self, img=abs_file("delete.png"), width=70, height=70,
+                             desc="Click to remove the prediction from the graph"),
+                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm.png"), width=70, height=70,
+                             desc="Click to start the prediction. It will display below and on the graph when done."),
             ]
         )
 
         # Add all prediction setting layouts to prediction settings container
         add_to_layout(
             pd_set_layout, stretches=[-1],
-            items=[prediction_label, self.ticker_pd_input, pd_type_layout, create_slider_layout(self), confirmations_layout]
+            items=[pd_label, self.ticker_pd_input, pd_type_layout, create_slider_layout(self), confirmations_layout]
         )
 
-        prediction_result_frame = QFrame(); prediction_result_frame.setStyleSheet("border: 1px solid black")
-        prediction_result_layout = QVBoxLayout(prediction_result_frame)
+        # Prediction result label
         self.pd_result_label = QLabel()
         self.pd_result_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.pd_result_label.setWordWrap(True)
-        self.pd_result_label.setStyleSheet("border: none; font-size: 18px; font-family: Calibri")
-        prediction_result_layout.addWidget(self.pd_result_label)
+        self.pd_result_label.setStyleSheet("border: 1px solid black; font-size: 18px; font-family: Calibri")
 
         # Add profile, prediction settings, and result frames to right frame
-        add_to_layout(right_layout, [profile_frame, self.pd_set_frame, prediction_result_frame], size_ratios=[1,10,10])
+        add_to_layout(right_layout, [profile_frame, self.pd_set_frame, self.pd_result_label], size_ratios=[1,10,10])
         return right_frame
 
     # Helper function to rebuild a select main frame

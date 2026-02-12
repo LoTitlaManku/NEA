@@ -13,7 +13,7 @@ from time import sleep
 
 ############################################################################
 
-# To find the absolute path of image files
+# Helper function to find the absolute path of image files
 from scripts.config import IMG_DIR
 def abs_file(file: str) -> str:
     return os.path.join(IMG_DIR, file).replace("\\", "/")
@@ -23,15 +23,13 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     cache_file = os.path.join(CACHE_DIR, f"{ticker}_{interval}.csv")
     # Return cache file if it exists
     if os.path.exists(cache_file):
-        # print(f"[CACHE] loaded {ticker}:{interval}")
         df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
         df.index.name = "Date"
         df.index = pd.to_datetime(df.index).tz_localize(None)
         return df
 
     # Download the appropriate data from yahoo finance elsewise
-    try: data = yf.download(ticker, period=("max" if interval in ["1h", "1d"] else "60d"),
-                            interval=interval, progress=False, auto_adjust=False)
+    try: data = yf.download(ticker, period="max", interval=interval, progress=False, auto_adjust=False)
     except: return None
     if data.empty: return None
 
@@ -54,6 +52,7 @@ def peek_data(ticker: str, days: int, interval: str = "15m") -> pd.DataFrame | N
     cache_file = os.path.join(CACHE_DIR, f"{ticker}_{interval}.csv")
     if not os.path.exists(cache_file): load_data(ticker, interval)
 
+    # Ensure data in correct format
     df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
     df.index.name = "Date"
     df.index = pd.to_datetime(df.index).tz_localize(None)
@@ -72,8 +71,8 @@ def validate_ticker(ticker: str) -> bool:
         return not data.empty
     except: return False
 
-# To update data for downloaded stocks every 15 minutes
 
+# Helper class to update data for downloaded stocks every 15 minutes
 class UpdateWorker(QThread):
     # Thread signals
     progress_msg: pyqtSignal = pyqtSignal(str)
@@ -82,21 +81,24 @@ class UpdateWorker(QThread):
 
     def __init__(self):
         super().__init__()
+        # Priority tickers to ensure any added to graph are completely up to date
         self.priority_tickers = []
         self._is_running = True
 
+    # Helper function to run checks and emit a finished signal
     def run(self):
         self.data_updater()
         self.check_accuracy()
         self.updates_finished.emit()
 
+    # Helper function to iterate through cache data to update
     def data_updater(self):
         files = os.listdir(CACHE_DIR)
         # Use 'set' type to keep track of what's done to avoid repetition
         processed = set()
 
         while len(processed) < len(files):
-            # Check for interrupt
+            # Check for interrupt and update those first
             if self.priority_tickers:
                 ticker = self.priority_tickers.pop(0)
                 for file in [f"{ticker}_{interval}.csv" for interval in ["1h", "1d"]]:
@@ -108,7 +110,7 @@ class UpdateWorker(QThread):
                     sleep(random.uniform(0.05, 0.2))
                 continue
 
-            # Regular update loop
+            # Else continue with regular update loop
             for file in tqdm(files, desc="Updating data", unit="file"):
                 if file in processed: continue
 
@@ -126,12 +128,14 @@ class UpdateWorker(QThread):
 
         self.progress_msg.emit("Completed data update")
 
+    # Helper function to update data for a stock
     @staticmethod
     def update_data(filename: str):
         # Split "AAPL_1d.csv" -> ticker="AAPL", interval="1d"
         name = os.path.splitext(filename)[0]
         ticker, interval = name.rsplit("_", 1)
 
+        # Get the needed interval format for yfinance from filename
         seconds_map = {"m": 60, "h": 3600, "d": 86400}
         unit, value = ''.join(filter(str.isalpha, interval)), int(''.join(filter(str.isdigit, interval)))
         interval_seconds = seconds_map[unit] * value
@@ -161,21 +165,25 @@ class UpdateWorker(QThread):
                 updated_df = updated_df[~updated_df.index.duplicated(keep='last')]
                 updated_df.to_csv(cache_file)
 
-
+    # Helper function to iterate through ledgers to validate
     def check_accuracy(self):
+        # TQDM also used for console feedback
         ledgers = os.listdir(LEDGER_DIR)
         for i, filename in enumerate(tqdm(ledgers, desc="Checking accuracy", unit="ledger")):
             filename: str = filename
 
+            # Emit progress to show in widgets in main menu
             self.progress_msg.emit(f"Checking Ledger: {filename}")
             self.progress_val.emit(int((i / len(ledgers)) * 100))
 
+            # Validate ledger
             ticker = filename.split("_")[0]
             self.validate_ledger(ticker, os.path.join(LEDGER_DIR, filename))
 
         self.progress_msg.emit("Completed ledger check")
         self.progress_val.emit(100)
 
+    # Helper function to validate ledger for a stock
     @staticmethod
     def validate_ledger(ticker: str, ledger_path: str):
         # Load ledger and find all entries that are unvalidated
@@ -203,11 +211,14 @@ class UpdateWorker(QThread):
                 direction = row['Direction']
 
                 # Check if the prediction is correct
-                direction_correct = True if (("UP" in direction and actual_price > start_price)
-                                       or ("DOWN" in direction and actual_price < start_price)) else False
+                direction_correct = (
+                    True if (("UP" in direction and actual_price > start_price)
+                         or ("DOWN" in direction and actual_price < start_price))
+                    else False
+                )
                 price_accurate = abs(actual_price - pred_price) / actual_price <= 0.02
 
-                # Update validation fields in the records
+                # Update validation fields in the records as integers for pandas datatype consistency
                 ledger.at[idx, 'Actual_Price'] = round(actual_price, 2)
                 ledger.at[idx, 'Is_Correct'] = int(direction_correct and price_accurate)
                 updated = True
@@ -219,16 +230,17 @@ class UpdateWorker(QThread):
                 updated = True
 
         if updated:
-            # Change dates back into strings for consistent formatting
+            # Change dates back into strings for pandas datatype consistency
             ledger['Target_Date'] = ledger['Target_Date'].dt.strftime('%Y-%m-%d %H:%M')
             ledger.to_csv(ledger_path, index=False)
 
-
+# Manager class to control when data updates happen
 class UpdateManager(QObject):
     timer: QTimer
 
     def __init__(self, progress_label: QLabel, progress_bar: QProgressBar):
         super().__init__()
+        # Save parent widgets that display progress
         self.plabel = progress_label
         self.pbar = progress_bar
         self.worker = UpdateWorker()
@@ -237,6 +249,7 @@ class UpdateManager(QObject):
         self.worker.progress_msg.connect(self.plabel.setText)
         self.worker.progress_val.connect(self.pbar.setValue)
 
+        # Start timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.start_updating)
 
@@ -250,7 +263,7 @@ class UpdateManager(QObject):
 
         QTimer.singleShot(int(initial_delay_ms), self.update_loop)
 
-    # Loop to run updating script
+    # Helper function loop to run updating script
     def update_loop(self):
         # Check if market is open
         now_utc = datetime.now(timezone.utc)
@@ -259,15 +272,14 @@ class UpdateManager(QObject):
         # Run loop
         self.start_updating()
         self.plabel.setText("Up to date")
-        QTimer.singleShot(5000, self.pbar.hide)
-        self.timer.start(900000)
+        self.timer.start(900000) # 15 minutes
 
+    # Helper function to start the update worker
     def start_updating(self):
         if self.worker.isRunning(): return
-        self.plabel.show()
-        self.pbar.show()
         self.worker.start()
 
+    # Helper function to add a stock to prioritise to ensure fully updated data being used
     def prioritize(self, ticker: str):
         if ticker in self.worker.priority_tickers: return
         self.worker.priority_tickers.append(ticker)

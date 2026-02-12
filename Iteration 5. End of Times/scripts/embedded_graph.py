@@ -26,7 +26,9 @@ class StockGraph:
         self.candle_colours = [
             {"bull": "#00ff00", "bear": "#ff0000"},
             {"bull": "#ffff00", "bear": "#9467bd"},
-            {"bull": "#3486eb", "bear": "#2b2b2b"}
+            {"bull": "#3486eb", "bear": "#2b2b2b"},
+            {"bull": "#f76fe5", "bear": "#f5b318"},
+            {"bull": "#7df6ff", "bear": "#7800a3"}
         ]
         self.loaded = {}
         self.selected_type = "Line"
@@ -131,7 +133,7 @@ class StockGraph:
         if ticker in self.loaded: return f"{ticker} already added"
 
         # Check if new ticker takes priority on graph
-        if len(self.loaded) >= 3:
+        if len(self.loaded) >= 5:
             if replace: self.remove_ticker(self.loaded.popitem()[0])
             else: return "Cannot load more than 3 tickers"
 

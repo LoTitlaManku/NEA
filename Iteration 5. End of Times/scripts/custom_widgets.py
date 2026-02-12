@@ -156,7 +156,7 @@ class ClickableLabel(QLabel):
 
 # Helper function to create a circular label for profile icon
 def create_circle_label(
-        parent: MainWindow | ProfileWindow, clickable: bool = False,
+        parent: MainWindow | ProfileWindow, clickable: bool = True,
         diameter: int = 100, desc: str = None, border: bool = True
 ) -> QLabel:
     # Get icon file and create a pixmap from it

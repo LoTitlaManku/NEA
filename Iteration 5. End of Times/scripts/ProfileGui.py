@@ -1,30 +1,37 @@
 
 from __future__ import annotations
 
+# Standard library imports
 import io
-import os
 import json
+import os
+from typing import TYPE_CHECKING
+
+# External library imports
 import matplotlib.pyplot as plt
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QCursor, QImage, QPixmap
+from PyQt6.QtWidgets import (QDialog, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
+                             QLineEdit, QMenu, QMessageBox, QScrollArea, QSlider, QVBoxLayout, QWidget)
+
+# Initialize matplotlib settings
 plt.ioff()
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap, QCursor, QImage
-from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
-                             QFileDialog, QWidget, QLabel, QFrame, QDialog, QMenu, QLineEdit, QScrollArea, QSlider)
-
-from profile_control import Profile
-from load_data import abs_file, peek_data, validate_ticker
-from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
+# Custom imports
+from DataManagement import abs_file, peek_data, validate_ticker
+from ProfileManagement import Profile
+from PyQtCustom import add_to_layout, create_circle_label, create_slider_layout, CustomButton
 from scripts.config import ICON_DIR
 
-# For type hinting
-from typing import TYPE_CHECKING
+# Type hinting imports
 if TYPE_CHECKING:
-    from main_gui import MainWindow
+    from HomeGui import MainWindow
 
 ############################################################################
 
+# Class for main profile window
 class ProfileWindow(QDialog):
+    # Type hints
     search_input: QLineEdit
     risk_slider: QSlider
 
@@ -55,10 +62,11 @@ class ProfileWindow(QDialog):
         profile_frame = QWidget(); profile_frame.setStyleSheet("background-color: None;")
         profile_frame_layout = QVBoxLayout(profile_frame)
         profile_frame_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        add_to_layout(profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
-                      items=[create_circle_label(self, clickable=True, diameter=120,
-                                                 desc="Click to select a profile image"),
-                             QLabel(self.logged_profile.get_username()) ] )
+        add_to_layout(
+            profile_frame_layout, alignment=Qt.AlignmentFlag.AlignCenter,
+            items=[create_circle_label(self, clickable=True, diameter=120, desc="Click to select a profile image"),
+                   QLabel(self.logged_profile.get_username()) ]
+        )
 
         # Settings frame styling
         setting_frame = QFrame(); setting_frame.setStyleSheet("border: 1px solid black")
@@ -71,15 +79,18 @@ class ProfileWindow(QDialog):
         edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(0,0,0,0)
         edit_layout.setSpacing(0)
 
-        edit_btns = [("logout_btn", abs_file("logout.png")),
-                     ("change_profile_btn", abs_file("change_profile.png")),
-                     ("export_data_btn", abs_file("export_data.png")),
-                     ("import_data_btn", abs_file("import_data.png")),
-                     ("delete_profile_btn", abs_file("delete.png"))  ]
+        edit_btns = [("logout_btn", abs_file("logout.png"), "Click to logout of profile"),
+                     ("change_profile_btn", abs_file("change_profile.png"), "Click to change profile"),
+                     ("export_data_btn", abs_file("export_data.png"), "Click to export saved data"),
+                     ("import_data_btn", abs_file("import_data.png"), "Click to import data"),
+                     ("delete_profile_btn", abs_file("delete.png"), "Click to delete profile. WARNING: All data will be permanently lost"),  ]
 
         # Add widget and layouts to correct outer layouts
-        add_to_layout(edit_layout, [CustomButton(name, "profile_btns", "indv", parent=self, img=img)
-                                    for name, img in edit_btns]  )
+        add_to_layout(
+            edit_layout,
+            [CustomButton(name, "profile_btns", "indv", parent=self, img=img, desc=desc)
+             for name, img, desc in edit_btns]
+        )
         add_to_layout(setting_layout, [edit_frame, create_slider_layout(self)])
         add_to_layout(top_layout, [profile_frame, setting_frame], stretches=[1,-1])
         return top_frame
@@ -120,8 +131,7 @@ class ProfileWindow(QDialog):
             # Create label for ticker
             ticker_label = QLabel(ticker); ticker_label.setStyleSheet("border: none; font-weight: bold")
             percent_label = QLabel(f"{'+' if last_price < now_price else '-'}{price_change}%")
-            percent_label.setStyleSheet(f"""border: none; color: {'#008000' if last_price < now_price
-																		    else '#FF0000'}""")
+            percent_label.setStyleSheet(f"""border: none; color: {'#008000' if last_price < now_price else '#FF0000'}""")
 
             # Add widget to the row and set function call on click
             add_to_layout(row_layout, [ticker_label, percent_label], stretches=[1])

@@ -1,17 +1,20 @@
 
-import sys
+# External library imports
 import numpy as np
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QInputDialog,
-                             QWidget, QLabel, QFrame, QDialog, QLineEdit, QComboBox, QSlider, QProgressBar)
+from PyQt6.QtWidgets import (
+    QComboBox, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+    QMainWindow, QMessageBox, QProgressBar, QSlider, QVBoxLayout, QWidget
+)
 
-from profile_control import DataManager, Profile
-from profile_gui import ProfileWindow
-from custom_widgets import CustomButton, create_slider_layout, create_circle_label, add_to_layout
-from embedded_graph import StockGraph
-from predictor import TrainingWorker
-from load_data import abs_file, validate_ticker, UpdateManager
+# Custom imports
+from DataManagement import UpdateManager, abs_file, validate_ticker
+from ProfileGui import ProfileWindow
+from ProfileManagement import DataManager, Profile
+from Predictor import TrainingWorker
+from PyQtCustom import CustomButton, add_to_layout, create_circle_label, create_slider_layout
+from StockGraph import StockGraph
 
 ############################################################################
 
@@ -134,8 +137,8 @@ class MainWindow(QMainWindow):
 
         # Prediction settings frame styling (pd_set = prediction_settings)
         self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
-        pd_set_layout = QVBoxLayout(self.pd_set_frame); pd_set_layout.setContentsMargins(3 ,3 ,3 ,3)
-        pd_set_layout.setSpacing(20)
+        pd_set_layout = QVBoxLayout(self.pd_set_frame); pd_set_layout.setSpacing(20)
+        pd_set_layout.setContentsMargins(3 ,3 ,3 ,3)
 
         pd_label = QLabel("Prediction settings:")
         pd_label.setStyleSheet("border: none; font-size: 16px; font-family: Calibri; font-weight: bold")
@@ -193,19 +196,24 @@ class MainWindow(QMainWindow):
         self.main_frames.update({frame_pos: [new, stretch]})
         self.main_layout.insertWidget(index, new, stretch)
 
+    # Helper function to rebuild the graph
     def rebuild_graph(self):
         self.graph_container.removeWidget(self.graph.ax.vb.win)
         self.graph.rebuild_self()
         self.graph_container.addWidget(self.graph.ax.vb.win)
 
+    # Helper function to get a dict of logged in profile
     def get_profile_data(self) -> dict:
         if self.logged_in: return self.logged_profile.get_full_data()
         else: return {}
 
+    # Helper function to add a stock to the graph
     def add_to_graph(self):
+        # Get ticker input
         ticker = self.ticker_input.text().strip().upper()
         if ticker == "": return
 
+        # Add it to the graph
         status = self.graph.add_ticker(ticker)
         if status == "No data or invalid ticker":
             QMessageBox.critical(self, "Error", "Invalid ticker")
@@ -213,17 +221,20 @@ class MainWindow(QMainWindow):
 
         self.ticker_input.setText("")
 
+    # Helper function to remove a stock from the graph
     def remove_from_graph(self):
         ticker = self.ticker_list_widget.currentText().strip()
         self.graph.remove_ticker(ticker)
 
+    # Helper function to switch between candlestick and line graph types
     def switch_graph_type(self):
         self.graph.switch_graph_type()
 
+    # Helper function to switch between different time intervals on the graph
     def switch_graph_res(self):
         self.graph.switch_graph_resolution(self.res_dropdown.currentText())
 
-    # Called when the profile label is clicked
+    # Helper function on profile label click
     def label_click(self) -> None:
         # If logged in, open new profile window
         if self.logged_in:
@@ -242,7 +253,7 @@ class MainWindow(QMainWindow):
                                             QLineEdit.EchoMode.Password)
         if not ok: return
 
-        # Ensure username & password meet length requirements or contain illegal characters
+        # Ensure username & password meet length requirements and don't contain illegal characters
         if (not all(6 <= len(w) <= 64 for w in [username, password]) or
             not all(c for c in username if c.isalnum() or c in [" ", "_"])):
             QMessageBox.critical(self, "Error", "Username or password is too short or username contains an illegal character.")
@@ -279,9 +290,9 @@ class MainWindow(QMainWindow):
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
 
-    # Called when start prediction button is clicked in right frame
+    # Helper function to start prediction
     def predict(self):
-        # Find ticker
+        # Get ticker and interval
         ticker = self.ticker_pd_input.text().upper()
         if not validate_ticker(ticker):
             QMessageBox.critical(self, "Error", "Invalid ticker"); return
@@ -292,19 +303,20 @@ class MainWindow(QMainWindow):
         self.pd_set_frame.setEnabled(False)
         self.pd_result_label.setText("Processing...")
 
-        def prediction_complete(forecast_results):
-            self.prediction_success(ticker, interval, forecast_results)
-
+        # Create an instance of the training worker for selected settings
         self.thread = TrainingWorker(ticker, interval)
-        self.thread.training_finished.connect(prediction_complete)
+        self.thread.training_finished.connect(lambda res, t=ticker, i=interval: self.prediction_success(ticker, interval, res))
         self.thread.training_error.connect(self.prediction_fail)
 
+        # Ensure the thread closes properly on finish
         self.thread.training_finished.connect(self.thread.quit)
         self.thread.training_finished.connect(self.thread.deleteLater)
 
         self.thread.start()
 
+    # Helper function to display completed prediction
     def prediction_success(self, ticker, interval, forecast_results):
+        # Re-enable setting frame
         self.pd_set_frame.setEnabled(True)
         self.ticker_pd_input.setText("")
 
@@ -312,6 +324,7 @@ class MainWindow(QMainWindow):
         risk_level = self.risk_slider.value()
         threshold = 0.5 + 0.35 * np.exp(-0.4 * (risk_level - 1))
 
+        # Build an array of text to dislpay prediction to user in result frame
         results = []
         for time_key, info in forecast_results.items():
             confidence = info['conf']
@@ -320,54 +333,18 @@ class MainWindow(QMainWindow):
                            f"-> Price: ${info['price']:.2f}<br>"
                            f"-> Confidence: {confidence:.1%}")
 
+        # Show all results to user
         self.res_dropdown.setCurrentText(f"1{interval[0]}")
         self.graph.add_future(ticker, interval, forecast_results)
         self.pd_result_label.setText("<br>".join(results))
 
+    # Helper function on prediction fail
     def prediction_fail(self, error):
         self.pd_set_frame.setEnabled(True)
         self.pd_result_label.setText(f"Prediction Failed: {error}")
-
-
-    # Called when save graph button is clicked (TBD: to be developed further)
-    def show_graph_save_popup(self, btn) -> None:
-        # Creates popup dialog and positions it below the button
-        popup = QDialog(self); popup.setWindowTitle(btn.name)
-        popup.setModal(True); popup.setFixedSize(200, 100)
-        btn_pos = btn.mapToGlobal(btn.rect().bottomLeft()); popup.move(btn_pos.x( ) -50, btn_pos.y())
-
-        # Take input from popup
-        layout = QVBoxLayout(); label = QLabel("Enter the name to save the graph as.")
-        input_box: QLineEdit = QLineEdit(); input_box.setPlaceholderText("Name...")
-
-        # On enter pressed, save graph and close popup
-        def save_and_close(): self.save_graph(); popup.accept()
-        input_box.returnPressed.connect(save_and_close)
-
-        # Label and input to layout then execute popup
-        add_to_layout(layout, [label, input_box], stretches=[-1])
-        popup.setLayout(layout); popup.exec()
-
-    # Helper function to save the state of the graph (TBD: to be developed further)
-    def save_graph(self) -> None:
-        # Wait 2 seconds, then display the graph has been saved
-        msg = QWidget(self)
-        msg.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.BypassWindowManagerHint)
-        msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        layout = QVBoxLayout(msg); label = QLabel("Saved.")
-        label.setStyleSheet("background-color: black; color: white; padding: 5px; border-radius: 5px;")
-        layout.addWidget(label)
-        msg.adjustSize(); pos = self.rect().center() - msg.rect().center(); msg.move(pos); msg.show()
-        QTimer.singleShot(2000, msg.close)
 
     # Ensure script terminates properly on window closure
     def closeEvent(self, event) -> None: event.accept()
 
 ############################################################################
 
-if __name__ == "__main__":
-    # Start the application
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())

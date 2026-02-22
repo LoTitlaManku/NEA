@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QApplication
 
 # Run every script
 if __name__ == "__main__":
-    from scripts.main_gui import MainWindow
+    from scripts.HomeGui import MainWindow
 
     app = QApplication(sys.argv)
     window = MainWindow()

@@ -1,46 +1,48 @@
 
-# file imports
+# Standard library imports
+import json
 import os
 import shutil
-import json
-import joblib
 import warnings
-# math/logic imports
+from datetime import datetime, timedelta
+
+# External library imports
+import joblib
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import QThread, pyqtSignal
-# data management imports
-import yfinance as yf
 import talib
-from datetime import timedelta, datetime
-# machine learning models imports
-os.environ["LOKY_MAX_CPU_COUNT"] = "1"
+import yfinance as yf
+from lightgbm import LGBMClassifier
+from PyQt6.QtCore import QThread, pyqtSignal
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
-from lightgbm import LGBMClassifier
 from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.metrics import accuracy_score
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-# Custom imports
-from load_data import load_data
-from scripts.config import MODEL_DIR, LEDGER_DIR
 
-warnings.filterwarnings("ignore") # Future warnings clog up console
+# Set environment variables and filters
+os.environ["LOKY_MAX_CPU_COUNT"] = "1"
+warnings.filterwarnings("ignore")
+
+# Custom imports
+from DataManagement import load_data
+from scripts.config import LEDGER_DIR, MODEL_DIR
 
 ############################################################################
 
-# Create separate thread for trainer so can run concurrently with gui
+# Class to create separate thread for trainer so can run concurrently with gui
 class TrainingWorker(QThread):
     # Signal to send the results back to the GUI when finished
     training_finished: pyqtSignal = pyqtSignal(dict)
     training_error: pyqtSignal = pyqtSignal(str)
 
-    def __init__(self, ticker, interval):
+    def __init__(self, ticker: str, interval: str):
         super().__init__()
         self.ticker = ticker
         self.interval = interval
 
+    # Run the prediction for its instance
     def run(self):
         try:
             forecast_results = run_prediction_pipline(self.ticker, self.interval)
@@ -48,7 +50,7 @@ class TrainingWorker(QThread):
         except Exception as e:
             self.training_error.emit(str(e))
 
-# Control and train models
+# Class to control and train models
 class TrainingManager:
     def __init__(self):
         self.seed = 42
@@ -94,7 +96,7 @@ class TrainingManager:
 
     # Evaluate model performance with accuracy and sharpe ratio
     @staticmethod
-    def _evaluate_performance(actual_direction, predicted_direction, actual_returns):
+    def _evaluate_performance(actual_direction: pd.Series, predicted_direction: np.ndarray, actual_returns: np.ndarray):
         # How often was the AI right about Up vs Down?
         hit_rate = accuracy_score(actual_direction, predicted_direction)
         # Following the AI, what would a daily wallet look like?
@@ -108,7 +110,8 @@ class TrainingManager:
         return hit_rate, sharpe_ratio, abs(sharpe_ratio), (sharpe_ratio < 0)
 
     # Train and evaluate LightGBM with walk-forward validation
-    def _train_lightgbm(self, features_train, target_train, features_test, target_test, price_returns):
+    def _train_lightgbm(self, features_train: pd.DataFrame, target_train: pd.Series, features_test: pd.DataFrame,
+                        target_test: pd.Series, price_returns: np.ndarray) -> dict:
         # Handle class imbalance (Make 'Up' and 'Down' days equally important)
         scale_pos_weight = (len(target_train) - target_train.sum()) / target_train.sum()
 
@@ -136,7 +139,8 @@ class TrainingManager:
                 'raw_predictions': test_predictions, 'trained_model_object': model}
 
     # Train and evaluate Lasso Logistic Regression with walk-forward validation
-    def _train_lasso_regression(self, features_train, target_train, features_test, target_test, price_returns):
+    def _train_lasso_regression(self, features_train: pd.DataFrame, target_train: pd.Series,
+                                features_test: pd.DataFrame, target_test: pd.Series, price_returns: np.ndarray) -> dict:
         # Put all indicators on the same scale (0 to 1 range)
         data_normalizer = StandardScaler()
 
@@ -171,7 +175,8 @@ class TrainingManager:
             'raw_predictions': test_predictions, 'trained_model_object': model, 'feature_scaler': data_normalizer}
 
     # Train and evaluate SVC with walk-forward validation
-    def _train_support_vector(self, features_train, target_train, features_test, target_test, price_returns):
+    def _train_support_vector(self, features_train: pd.DataFrame, target_train: pd.Series, features_test: pd.DataFrame,
+                              target_test: pd.Series, price_returns: np.ndarray) -> dict:
         # Put all indicators on the same scale (0 to 1 range) [SVC very sensitive to scale]
         data_normalizer = StandardScaler()
 
@@ -208,7 +213,8 @@ class TrainingManager:
             'raw_predictions': test_predictions, 'trained_model_object': model, 'feature_scaler': data_normalizer}
 
     # Save models for all horizons with the best performing model type
-    def _save_winning_strategy_assets(self, ticker, interval, full_results, features_data, targets_dataframe):
+    def _save_winning_strategy_assets(self, ticker: str, interval: str, full_results: dict,
+                                      features_data: dict, targets_dataframe: pd.DataFrame) -> None:
         # Create the folder for this specific stock's model data to save
         save_folder = os.path.join(MODEL_DIR, f"{ticker}_{interval}")
         if not os.path.exists(save_folder): os.makedirs(save_folder)
@@ -266,7 +272,7 @@ class TrainingManager:
             joblib.dump(price_guesser, f"{save_folder}/reg_{horizon}{period}.pkl")
 
     # Run all helper functions and consolidate the best model
-    def run_training_pipeline(self, ticker: str, interval: str):
+    def run_training_pipeline(self, ticker: str, interval: str) -> bool:
         # Remove any corrupt model paths (i.e. not all necessary files exist validated before call)
         model_path = os.path.join(MODEL_DIR, f"{ticker}_{interval}")
         if os.path.exists(model_path): shutil.rmtree(model_path)
@@ -314,7 +320,7 @@ class TrainingManager:
 ############################################################################
 
 # Save prediction to ledger
-def save_prediction(ticker: str, interval: str, current_date: datetime, forecast_results: dict):
+def save_prediction(ticker: str, interval: str, current_date: datetime, forecast_results: dict) -> None:
     # Check if that exact prediction has already been saved (note: using same model will always return the same prediction for the same data)
     if prediction_saved(ticker, interval, current_date): return
 
@@ -344,7 +350,7 @@ def save_prediction(ticker: str, interval: str, current_date: datetime, forecast
     else: df_new.to_csv(ledger_file, mode='a', header=False, index=False)
 
 # Load prediction from ledger
-def load_prediction(ticker: str, interval: str, date: datetime):
+def load_prediction(ticker: str, interval: str, date: datetime) -> dict:
     ledger_file = os.path.join(LEDGER_DIR, f"{ticker}_ledger.csv")
     ledger = pd.read_csv(ledger_file) # note: no validation needed as would always run prediction_saved() first
     date = date.strftime("%Y-%m-%d %H:%M")
@@ -382,7 +388,7 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
 
 
 # Run all helper functions to display a prediction
-def run_prediction_pipline(ticker: str, interval: str):
+def run_prediction_pipline(ticker: str, interval: str) -> dict:
     try:
         # Add in technical indicators
         df, processed_df, assets = prepare_prediction_data(ticker, interval)
@@ -399,17 +405,19 @@ def run_prediction_pipline(ticker: str, interval: str):
                          "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
                          float(df['Close'].iloc[-1]))  # horizons, offsets, delta_type, period, last_trade_date, current_price
 
+            # Generate a prediction
             forecast_results = generate_forecasts(processed_df, assets, tech_info)
             save_prediction(ticker, interval, last_trade_date, forecast_results)
         else: forecast_results = load_prediction(ticker, interval, last_trade_date)
 
         return forecast_results
+    # Catch errors
     except Exception as e:
         print(f"Error - {type(e).__name__}: {e}")
         return {}
 
 # Adds in technical indicators, trains model if needed or loads it
-def prepare_prediction_data(ticker: str, interval: str):
+def prepare_prediction_data(ticker: str, interval: str) -> tuple:
     model_path = os.path.join(MODEL_DIR, f"{ticker}_{interval}")
 
     # Ensure data exists
@@ -432,7 +440,7 @@ def prepare_prediction_data(ticker: str, interval: str):
     return df, processed_df, (scaler, features, model_path)
 
 # Predict the price movement
-def generate_forecasts(processed_df: pd.DataFrame, assets: tuple, tech_info: tuple):
+def generate_forecasts(processed_df: pd.DataFrame, assets: tuple, tech_info: tuple) -> dict:
     scaler, features, model_path = assets
     horizons, offsets, delta_type, period, last_trade_date, current_price =  tech_info
 
@@ -474,5 +482,3 @@ def generate_forecasts(processed_df: pd.DataFrame, assets: tuple, tech_info: tup
 
 ############################################################################
 
-if __name__ == "__main__":
-    print("Wrong")

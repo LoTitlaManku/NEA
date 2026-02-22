@@ -1,19 +1,23 @@
 
 from __future__ import annotations
 
-import finplot as fplt
-import pandas as pd
-import numpy as np
+# Standard library imports
 from datetime import timedelta
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QColor
-
-from load_data import load_data
-
-# For type hinting
 from typing import TYPE_CHECKING
+
+# External library imports
+import finplot as fplt
+import numpy as np
+import pandas as pd
+from PyQt6.QtGui import QColor
+from PyQt6.QtWidgets import QApplication
+
+# Custom imports
+from DataManagement import load_data
+
+# Type hinting imports
 if TYPE_CHECKING:
-    from main_gui import MainWindow
+    from HomeGui import MainWindow
 
 ############################################################################
 

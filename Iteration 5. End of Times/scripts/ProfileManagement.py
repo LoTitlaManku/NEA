@@ -1,8 +1,13 @@
 
+# Standard library imports
 import json
 import os
-from cryptography.fernet import Fernet
+
+# External library imports
 import bcrypt
+from cryptography.fernet import Fernet
+
+# Custom imports
 from scripts.config import DATA_DIR
 
 ############################################################################
@@ -33,6 +38,7 @@ class Profile:
 
     # Validate the password for the profile
     def validate_password(self, password: str) -> bool:
+        # Find what hash was used for that password and use it to hash the new password
         stored_hash = self.__data.get("password", "").encode('utf-8')
         password_bytes = password.encode('utf-8')
         return bcrypt.checkpw(password_bytes, stored_hash)
@@ -77,6 +83,7 @@ class DataManager:
     def hash_password(password: str) -> str:
         password_bytes = password.encode('utf-8') # Password string to bytes
 
+        # Generate a "salt" to hash the password
         salt = bcrypt.gensalt(rounds=12)
         hashed_bytes = bcrypt.hashpw(password_bytes, salt)
 

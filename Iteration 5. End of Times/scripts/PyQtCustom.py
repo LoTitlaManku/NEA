@@ -1,19 +1,22 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QPixmap, QPainterPath, QPen, QColor, QMouseEvent
-from PyQt6.QtWidgets import (QHBoxLayout, QVBoxLayout, QSizePolicy,
-                             QWidget, QLayout, QLabel, QPushButton, QSlider)
-
-from typing import TYPE_CHECKING, Callable, Optional
+# Standard library imports
 import os
+from typing import TYPE_CHECKING, Callable, Optional
+
+# External library imports
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPainterPath, QPixmap, QPen
+from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QLayout, QPushButton, QSizePolicy, QSlider, QVBoxLayout, QWidget)
+
+# Custom imports
 from scripts.config import ICON_DIR
 
-# For type hinting
+# Type hinting imports
 if TYPE_CHECKING:
-    from main_gui import MainWindow
-    from profile_gui import ProfileWindow
+    from HomeGui import MainWindow
+    from ProfileGui import ProfileWindow
 
 ############################################################################
 

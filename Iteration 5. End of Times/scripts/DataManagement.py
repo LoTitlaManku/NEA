@@ -1,15 +1,19 @@
 
+# Standard library imports
 import os
+import random
+from datetime import datetime, time, timezone
+from time import sleep
+
+# External library imports
 import pandas as pd
 import yfinance as yf
-from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QObject
-from PyQt6.QtWidgets import QProgressBar, QLabel
-
-from scripts.config import CACHE_DIR, LEDGER_DIR
-import random
+from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QLabel, QProgressBar
 from tqdm import tqdm
-from datetime import datetime, timezone, time
-from time import sleep
+
+# Custom imports
+from scripts.config import CACHE_DIR, LEDGER_DIR
 
 ############################################################################
 

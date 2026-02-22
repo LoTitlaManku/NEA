@@ -1,8 +1,0 @@
-# Ignore stock data cache
-stock_data_cache/
-
-# Ignore saved models
-saved_models/
-
-# Ignore saved predictions
-saved_predictions/

@@ -5,9 +5,9 @@ __pycache__/
 *.pyc
 
 # Project specific caches
-Iteration 5. End of Times/stock_cache/
-Iteration 5. End of Times/ledgers/
-Iteration 5. End of Times/models/
+stock_cache/
+ledgers/
+models/
 .python-version
 
 # IDE files

@@ -386,7 +386,6 @@ def prediction_saved(ticker: str, interval: str, date) -> bool:
     match = ledger[(ledger['Interval'] == interval) & (ledger['Date_Predicted'] == date)]
     return not match.empty
 
-
 # Run all helper functions to display a prediction
 def run_prediction_pipline(ticker: str, interval: str) -> dict:
     try:
@@ -400,14 +399,18 @@ def run_prediction_pipline(ticker: str, interval: str) -> dict:
         if not prediction_saved(ticker, interval, last_trade_date):
             # Create a dict with basic information about the state of the prediction and stock
             is_hour = "h" in interval
-            tech_info = ({1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
-                         {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
-                         "hours" if is_hour else "days", "h" if is_hour else "d", last_trade_date,
-                         float(df['Close'].iloc[-1]))  # horizons, offsets, delta_type, period, last_trade_date, current_price
+            tech_info = (
+                {1: '1H', 5: '5H', 21: '21H'} if is_hour else {1: '1D', 5: '1W', 21: '1M'},
+                {1: 1, 5: 5, 21: 21} if is_hour else {1: 1, 5: 7, 21: 30},
+                "hours" if is_hour else "days", "h" if is_hour else "d",
+                last_trade_date,
+                float(df['Close'].iloc[-1])
+            )  # horizons, offsets, delta_type, period, last_trade_date, current_price
 
             # Generate a prediction
             forecast_results = generate_forecasts(processed_df, assets, tech_info)
             save_prediction(ticker, interval, last_trade_date, forecast_results)
+
         else: forecast_results = load_prediction(ticker, interval, last_trade_date)
 
         return forecast_results

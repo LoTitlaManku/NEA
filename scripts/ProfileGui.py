@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QCursor, QImage, QPixmap
-from PyQt6.QtWidgets import (QDialog, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
-                             QLineEdit, QMenu, QMessageBox, QScrollArea, QSlider, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QDialog, QFileDialog, QFrame, QHBoxLayout, QVBoxLayout, QInputDialog, QLabel,
+    QLineEdit, QMenu, QMessageBox, QScrollArea, QSlider, QWidget
+)
 
 # Initialize matplotlib settings
 plt.ioff()
@@ -79,11 +81,13 @@ class ProfileWindow(QDialog):
         edit_layout = QHBoxLayout(edit_frame); edit_layout.setContentsMargins(0,0,0,0)
         edit_layout.setSpacing(0)
 
-        edit_btns = [("logout_btn", abs_file("logout.png"), "Click to logout of profile"),
-                     ("change_profile_btn", abs_file("change_profile.png"), "Click to change profile"),
-                     ("export_data_btn", abs_file("export_data.png"), "Click to export saved data"),
-                     ("import_data_btn", abs_file("import_data.png"), "Click to import data"),
-                     ("delete_profile_btn", abs_file("delete.png"), "Click to delete profile. WARNING: All data will be permanently lost"),  ]
+        edit_btns = [
+            ("logout_btn", abs_file("logout.png"), "Click to logout of profile"),
+            ("change_profile_btn", abs_file("change_profile.png"), "Click to change profile"),
+            ("export_data_btn", abs_file("export_data.png"), "Click to export saved data"),
+            ("import_data_btn", abs_file("import_data.png"), "Click to import data"),
+            ("delete_profile_btn", abs_file("delete.png"), "Click to delete profile. WARNING: Irreversible."),
+        ]
 
         # Add widget and layouts to correct outer layouts
         add_to_layout(
@@ -153,8 +157,9 @@ class ProfileWindow(QDialog):
         self.search_input.setStyleSheet("border: 1px solid black; padding-left: 10px;")
         self.search_input.returnPressed.connect(self.add_stock)
 
-        confirm_btn = CustomButton("search_confirm_btn", "Na", "indv", parent=self,
-                                   img=abs_file("confirm.png"), width=60, height=40)
+        confirm_btn = CustomButton(
+            "search_confirm_btn", "Na", "indv", parent=self, img=abs_file("confirm.png"), width=60, height=40
+        )
         confirm_btn.setProperty("BorderBlank", "true")
         confirm_btn.style().unpolish(confirm_btn); confirm_btn.style().polish(confirm_btn)
         add_to_layout(search_layout, [self.search_input, confirm_btn])
@@ -189,6 +194,7 @@ class ProfileWindow(QDialog):
         # Get price change
         last_price, now_price = df.iloc[0]['Close'], df.iloc[-1]['Close']
         price_change = round(abs((now_price - last_price) / last_price) * 100, 2)
+        colour = '#008000' if now_price >= last_price else '#FF0000'
 
         # Frame for the row styling
         card = QFrame(); card.setFixedHeight(120)
@@ -197,8 +203,7 @@ class ProfileWindow(QDialog):
 
         # Create a graph of latest data
         fig, ax = plt.subplots(figsize=(4, 0.8), dpi=100); ax.margins(x=0, y=0.05)
-        ax.plot(df.index, df['Close'], color=('#008000' if now_price >= last_price else '#FF0000'),
-                linewidth=2)
+        ax.plot(df.index, df['Close'], color=colour, linewidth=2)
 
         # Make graph "Invisible" (Hide all axes/borders)
         ax.axis('off'); fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -216,8 +221,7 @@ class ProfileWindow(QDialog):
 
         # Create percentage change label
         percent_label = QLabel(f"{'+' if last_price < now_price else '-'}{price_change}%")
-        percent_label.setStyleSheet(f"""font-size: 18px; border: none; color: {
-											('#008000' if last_price < now_price else '#FF0000')}  """)
+        percent_label.setStyleSheet(f"font-size: 18px; border: none; color: {colour}")
         percent_label.setAlignment(Qt.AlignmentFlag.AlignCenter); percent_label.setFixedWidth(120)
 
         # Create ticker label and add all parts to main layout
@@ -250,7 +254,8 @@ class ProfileWindow(QDialog):
     def show_stock_menu(self, ticker: str, current_index: int) -> None:
         # Menu styling
         menu = QMenu(self); menu.setStyleSheet("QMenu {border: 1px solid black; padding: 5px}")
-        move_up = menu.addAction("Move Up"); move_down = menu.addAction("Move Down")
+        move_up = menu.addAction("Move Up")
+        move_down = menu.addAction("Move Down")
         delete_stock = menu.addAction("Delete from Saved")
 
         # Disable Move Up if at top, Move Down if at bottom
@@ -304,8 +309,8 @@ class ProfileWindow(QDialog):
         # Get username and password input
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
         if not ok: return
-        password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:",
-                                            QLineEdit.EchoMode.Password)
+
+        password, ok = QInputDialog.getText(self, "Login", f"Enter Password:", QLineEdit.EchoMode.Password)
         if not ok: return
 
         result = self.parent_window.data_manager.get_profile(username, password)
@@ -316,25 +321,30 @@ class ProfileWindow(QDialog):
             self.rebuild_parent = True
             QMessageBox.information(self, "Success", f"Welcome, {username}!")
             self.accept()
+
         # Display error to user upon failure
         elif result == "Non-existent profile":
-            QMessageBox.critical(self, "Profile Not Found",
-                                 "Profile does not exist. Go back to main menu to create new.")
+            QMessageBox.critical(
+                self, "Profile Not Found", "Profile does not exist. Go back to main menu to create new."
+            )
+
         elif result == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
     # Helper function to delete a profile
     def delete_profile(self) -> None:
         # Get password input
-        password, ok = QInputDialog.getText(self, "Security check",
-                                            f"Enter Password for {self.logged_profile.get_username()}:",
-                                            QLineEdit.EchoMode.Password)
+        password, ok = QInputDialog.getText(
+            self, "Security check", f"Enter Password for {self.logged_profile.get_username()}:",
+            QLineEdit.EchoMode.Password
+        )
         if not ok: return
 
         # Give second confirmation to user
-        confirmation = QMessageBox.question(self, "Confirm Action",
-            "Are you sure you want to proceed? All data will be permanently lost",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        confirmation = QMessageBox.question(
+            self, "Confirm Action", "Are you sure you want to proceed? All data will be permanently lost.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No
+        )
         if confirmation != QMessageBox.StandardButton.Yes: return
 
         success = self.parent_window.data_manager.delete_profile(self.logged_profile, password)
@@ -345,6 +355,7 @@ class ProfileWindow(QDialog):
             self.parent_window.status_label.setText("Not logged in")
             QMessageBox.information(self, "Success", "Profile deleted.")
             self.accept()
+
         # Display error to user upon failure
         elif success == "Incorrect password": QMessageBox.critical(self, "Login Failed", "Incorrect password.")
         else: QMessageBox.critical(self, "Error", f"Failed to delete data.")
@@ -352,9 +363,11 @@ class ProfileWindow(QDialog):
     # Helper function to export user data
     def export_profile(self) -> None:
         # Open the "Save As" Dialog
-        file_path, _ = QFileDialog.getSaveFileName(self, "Export Profile Data",
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Profile Data",
             "profile_export.json",  # Default filename
-            "JSON Files (*.json);;All Files (*)") # File filters
+            "JSON Files (*.json);;All Files (*)" # File filters
+        )
 
         # Ensure user selected a path (didn't click "Cancel")
         if not file_path: return
@@ -363,18 +376,22 @@ class ProfileWindow(QDialog):
             data_to_export = self.logged_profile.get_data()
             with open(file_path, "w") as f: json.dump(data_to_export, f, indent=4)
             QMessageBox.information(self, "Success", f"Data exported to {file_path}")
+
         # Display error on failure
         except PermissionError: QMessageBox.critical(self, "Export Error", "Missing permissions.")
-        except OSError: QMessageBox.critical(self, "Export Error",
-                            f"Failed to export data. Disk may be full or file is locked by another process.")
+        except OSError: QMessageBox.critical(
+            self, "Export Error", f"Failed to export data. Disk may be full or file is locked by another process."
+        )
         except Exception as e: QMessageBox.critical(self, "Export Error", f"Could not save file: {e}")
 
     # Helper function to import data from a json
     def import_profile(self) -> None:
         # Open the "Open File" Dialog
-        file_path, _ = QFileDialog.getOpenFileName(self, "Import Profile Data",
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Import Profile Data",
             "",  # Default directory
-            "JSON Files (*.json);;All Files (*)") # File filters
+            "JSON Files (*.json);;All Files (*)" # File filters
+        )
 
         # Ensure user selected a path (didn't click "Cancel")
         if not file_path: return
@@ -384,9 +401,11 @@ class ProfileWindow(QDialog):
             self.logged_profile.update_data(imported_data)
             QMessageBox.information(self, "Success", "Profile data imported and saved successfully.")
             self.accept()
+
         # Display error on failure
-        except json.JSONDecodeError: QMessageBox.critical(self, "Import Error",
-                                                          "The file is not a valid JSON file.")
+        except json.JSONDecodeError: QMessageBox.critical(
+            self, "Import Error", "The file is not a valid JSON file."
+        )
         except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 
     # Helper function on profile label click to call correct function
@@ -394,23 +413,28 @@ class ProfileWindow(QDialog):
     # Helper function to select a profile icon
     def choose_profile_icon(self):
         # Open the "Open File" Dialog
-        file_path, _ = QFileDialog.getOpenFileName(self, "Choose pofile icon.",
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Choose pofile icon.",
             "",  # Default directory
-            "Image Files (*.png *.jpg *.jpeg);;All Files (*)") # File filters
+            "Image Files (*.png *.jpg *.jpeg);;All Files (*)" # File filters
+        )
 
         # Ensure user selected a path (didn't click "Cancel")
         if not file_path: return
         try:
             # Get path of image and ensure another icon file doesn't already exist for that user
             _, ext = os.path.splitext(file_path)
-            dest_path = os.path.join(ICON_DIR,
-                                     f"{self.logged_profile.get_username()}{ext.lower()}").replace("\\", "/")
+            dest_path = os.path.join(
+                ICON_DIR, f"{self.logged_profile.get_username()}{ext.lower()}"
+            ).replace("\\", "/")
+
             if os.path.exists(dest_path): os.remove(dest_path)
 
             # Save a scaled version of the image in the correct path and return
             img = QPixmap(file_path).scaled(70,70); img.save(dest_path)
             self.rebuild_frame("top"); self.rebuild_parent = True
             QMessageBox.information(self, "Success", "Profile icon imported and saved successfully.")
+
         # Display error on failure
         except Exception as e: QMessageBox.critical(self, "Import Error", f"Could not read file: {e}")
 

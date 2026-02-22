@@ -209,12 +209,12 @@ class StockGraph:
         forecast_dates = [last_trade_date] + [forecast_results[d]['target_date'] for d in [1,5,21]]
 
         # Turn prediction dots into smooth line
-        def create_forecast_path(key):
+        def create_path(key):
             forecast_prices = [current_price] + [forecast_results[d][key] for d in [1,5,21]]
             path_series = pd.Series(forecast_prices, index=forecast_dates)
             return path_series.reindex(full_data.index).interpolate(method="linear").dropna()
 
-        tline_mid, tline_up, tline_lo = create_forecast_path('price'), create_forecast_path('up'), create_forecast_path('lo')
+        tline_mid, tline_up, tline_lo = create_path('price'), create_path('up'), create_path('lo')
 
         # Helper to shade areas between lines
         def paint_uncertain_zone(start_date, end_date, colour):

@@ -227,8 +227,10 @@ class UpdateWorker(QThread):
                 ledger.at[idx, 'Is_Correct'] = int(direction_correct and price_accurate)
                 updated = True
 
-            # If predicted date outside market hours set invalid (unless time is 00:00 as 1d predictions set time to 00:00 for data consistency)
-            elif (target_date.weekday() >= 5 or not time(13, 30) <= target_date.time() <= time(21, 30)) and target_date.time() != time(0,0):
+            # If predicted date outside market hours set invalid
+            # (unless time is 00:00 as 1d predictions set time to 00:00 for datatype consistency)
+            elif ((target_date.weekday() >= 5 or not time(13, 30) <= target_date.time() <= time(21, 30))
+                  and target_date.time() != time(0,0)):
                 ledger.at[idx, "Actual_Price"] = -1
                 ledger.at[idx, "Is_Correct"] = -1
                 updated = True

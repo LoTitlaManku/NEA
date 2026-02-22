@@ -20,6 +20,7 @@ from StockGraph import StockGraph
 
 class MainWindow(QMainWindow):
     # Classes
+    logged_profile: Profile | None
     graph: StockGraph
     updater: UpdateManager
     thread: TrainingWorker
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
         # Initialize the profile logic
         self.data_manager = DataManager()
         self.logged_in = False
-        self.logged_profile: Profile | None = None
+        self.logged_profile = None
         self.status_label = QLabel("Not logged in")
 
         # Set up the main layout and save to dict for reframing later
@@ -73,7 +74,8 @@ class MainWindow(QMainWindow):
         btn_layout = QHBoxLayout(); btn_layout.setSpacing(4)
 
         # Ticker input and list
-        self.ticker_input = QLineEdit(); self.ticker_input.setPlaceholderText("Enter ticker (e.g. AAPL, TSLA, NVDA)")
+        self.ticker_input = QLineEdit()
+        self.ticker_input.setPlaceholderText("Enter ticker (e.g. AAPL, TSLA, NVDA)")
         self.ticker_input.returnPressed.connect(self.add_to_graph)
         self.ticker_list_widget = QComboBox()
 
@@ -97,7 +99,8 @@ class MainWindow(QMainWindow):
         )
 
         # Key label for html string
-        self.keys_label = QLabel(""); self.keys_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.keys_label = QLabel("")
+        self.keys_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         add_to_layout(top_layout, [btn_layout, self.keys_label])
 
         # Graph container
@@ -108,7 +111,8 @@ class MainWindow(QMainWindow):
         # Updater visuals
         update_layout = QHBoxLayout()
         self.update_label = QLabel(); self.update_progress = QProgressBar()
-        self.update_progress.setMinimumHeight(10); self.update_progress.setTextVisible(False)
+        self.update_progress.setMinimumHeight(10)
+        self.update_progress.setTextVisible(False)
 
         add_to_layout(update_layout, [self.update_label, self.update_progress])
         self.updater = UpdateManager(self.update_label, self.update_progress)
@@ -136,17 +140,18 @@ class MainWindow(QMainWindow):
         )
 
         # Prediction settings frame styling (pd_set = prediction_settings)
-        self.pd_set_frame = QFrame(); self.pd_set_frame.setStyleSheet("border: 1px solid black")
+        self.pd_set_frame = QFrame()
+        self.pd_set_frame.setStyleSheet("border: 1px solid black; font-size: 16px; font-family: Calibri")
         pd_set_layout = QVBoxLayout(self.pd_set_frame); pd_set_layout.setSpacing(20)
         pd_set_layout.setContentsMargins(3 ,3 ,3 ,3)
 
         pd_label = QLabel("Prediction settings:")
-        pd_label.setStyleSheet("border: none; font-size: 16px; font-family: Calibri; font-weight: bold")
+        pd_label.setStyleSheet("border: none; font-weight: bold")
 
         # Ticker input widget
         self.ticker_pd_input = QLineEdit(); self.ticker_pd_input.setFixedHeight(30)
         self.ticker_pd_input.setPlaceholderText("Ticker symbol...")
-        self.ticker_pd_input.setStyleSheet("font-size: 16px; font-family: Calibri; border: none; border-bottom: 2px solid #999")
+        self.ticker_pd_input.setStyleSheet("border: none; border-bottom: 2px solid #999")
 
         # Prediction type button selection
         pd_type_layout = QHBoxLayout(); pd_type_layout.setSpacing(10)
@@ -161,10 +166,10 @@ class MainWindow(QMainWindow):
         confirmations_layout = QHBoxLayout(); confirmations_layout.setSpacing(50)
         add_to_layout(confirmations_layout,
             items=[
-                CustomButton("remove_pd_btn", "confirmation_btns", "indv", self, img=abs_file("delete.png"), width=70, height=70,
-                             desc="Click to remove the prediction from the graph"),
-                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm.png"), width=70, height=70,
-                             desc="Click to start the prediction. It will display below and on the graph when done."),
+                CustomButton("remove_pd_btn", "confirmation_btns", "indv", self, img=abs_file("delete.png"),
+                             width=70, height=70, desc="Click to remove prediction from graph"),
+                CustomButton("predict_btn", "confirmation_btns", "indv", self, img=abs_file("confirm.png"),
+                             width=70, height=70, desc="Click to start prediction."),
             ]
         )
 
@@ -249,14 +254,14 @@ class MainWindow(QMainWindow):
         # Get username and password input
         username, ok = QInputDialog.getText(self, "Login", "Enter Username:")
         if not ok: return
-        password, ok = QInputDialog.getText(self, "Login", f"Enter Password for {username}:",
-                                            QLineEdit.EchoMode.Password)
+
+        password, ok = QInputDialog.getText(self, "Login", f"Enter Password:", QLineEdit.EchoMode.Password)
         if not ok: return
 
         # Ensure username & password meet length requirements and don't contain illegal characters
-        if (not all(6 <= len(w) <= 64 for w in [username, password]) or
-            not all(c for c in username if c.isalnum() or c in [" ", "_"])):
-            QMessageBox.critical(self, "Error", "Username or password is too short or username contains an illegal character.")
+        if (not all(6 <= len(word) <= 64 for word in [username, password]) or
+            not all(char for char in username if char.isalnum() or char in ["-", "_"])):
+            QMessageBox.critical(self, "Error", "Username, password is too short or contains an illegal character.")
             return
 
         result = self.data_manager.get_profile(username, password)
@@ -266,11 +271,13 @@ class MainWindow(QMainWindow):
             self.rebuild_frame("right")
             self.status_label.setText(f"Status: Logged In as {username}")
             QMessageBox.information(self, "Success", f"Welcome, {username}!")
+
         # If validation in DataManager class finds no profile, prompt user to create a new profile
         elif result == "Non-existent profile":
-            reply = QMessageBox.question(self, "Profile Not Found",
-                                         "Profile does not exist. Would you like to create a new one?",
-                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            reply = QMessageBox.question(
+                self, "Profile Not Found", "Profile does not exist. Would you like to create a new one?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
 
             # If they wish to proceed, create a new profile with details previously entered
             if reply == QMessageBox.StandardButton.Yes:
@@ -279,23 +286,27 @@ class MainWindow(QMainWindow):
                     QMessageBox.information(self, "Success", "New profile created! Please log in again.")
                 else: QMessageBox.critical(self, "Creation Error", result)
 
-                self.status_label.setText("Status: New login created"); return
+                self.status_label.setText("Status: New login created")
+                return
 
             self.status_label.setText("Status: Login Failed.")
+
         # If wrong password was entered, return and display to user error
         elif result == "Incorrect password":
             self.status_label.setText("Status: Incorrect Password.")
             QMessageBox.critical(self, "Login Failed", "Incorrect password.")
+
         # Catch any other errors and display them
         else: QMessageBox.critical(self, "Error", f"An error occurred: {result}")
 
-
     # Helper function to start prediction
-    def predict(self):
+    def predict(self) -> None:
         # Get ticker and interval
         ticker = self.ticker_pd_input.text().upper()
         if not validate_ticker(ticker):
-            QMessageBox.critical(self, "Error", "Invalid ticker"); return
+            QMessageBox.critical(self, "Error", "Invalid ticker")
+            return
+
         interval = next((btn.name for btn in self.btns["pd_type_btns"] if btn.isChecked()), None)
         for btn in self.btns["pd_type_btns"]: btn.reset()
 
@@ -305,7 +316,9 @@ class MainWindow(QMainWindow):
 
         # Create an instance of the training worker for selected settings
         self.thread = TrainingWorker(ticker, interval)
-        self.thread.training_finished.connect(lambda res, t=ticker, i=interval: self.prediction_success(ticker, interval, res))
+        self.thread.training_finished.connect(
+            lambda res, t=ticker, i=interval: self.prediction_success(ticker, interval, res)
+        )
         self.thread.training_error.connect(self.prediction_fail)
 
         # Ensure the thread closes properly on finish
@@ -315,7 +328,7 @@ class MainWindow(QMainWindow):
         self.thread.start()
 
     # Helper function to display completed prediction
-    def prediction_success(self, ticker, interval, forecast_results):
+    def prediction_success(self, ticker: str, interval: str, forecast_results: dict) -> None:
         # Re-enable setting frame
         self.pd_set_frame.setEnabled(True)
         self.ticker_pd_input.setText("")
@@ -328,7 +341,8 @@ class MainWindow(QMainWindow):
         results = []
         for time_key, info in forecast_results.items():
             confidence = info['conf']
-            results.append(f"<u>For {time_key}{interval[1]}:</u><b> {'️⚠️ Low confidence!' if confidence < threshold else ''}</b><br>"
+            warn = '️⚠️ Low confidence!' if confidence < threshold else ''
+            results.append(f"<u>For {time_key}{interval[1]}:</u><b>{warn}</b><br>"
                            f"-> Direction: {info['dir']}<br>"
                            f"-> Price: ${info['price']:.2f}<br>"
                            f"-> Confidence: {confidence:.1%}")

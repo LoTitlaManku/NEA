@@ -37,7 +37,6 @@ class CustomButton(QPushButton):
         # Logic map for name of button to function call on click
         self.actions: dict[str, Callable] = {
             # MainWindow
-            "save_graph_btn": lambda: self.parent.show_graph_save_popup(self),
             "predict_btn": lambda: self.parent.predict(),
             "remove_pd_btn": lambda: self.parent.rebuild_graph(),
             # Graph
@@ -171,8 +170,9 @@ def create_circle_label(
     if pixmap.isNull(): pixmap = QPixmap(default)
 
     # Scale pixmap and setup painter
-    pixmap = pixmap.scaled(diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                           Qt.TransformationMode.SmoothTransformation)
+    pixmap = pixmap.scaled(
+        diameter, diameter, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+    )
     mask = QPixmap(diameter, diameter); mask.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(mask)

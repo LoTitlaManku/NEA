@@ -9,12 +9,12 @@ from PyQt6.QtWidgets import (
 )
 
 # Custom imports
-from DataManagement import UpdateManager, abs_file, validate_ticker
-from ProfileGui import ProfileWindow
-from ProfileManagement import DataManager, Profile
-from Predictor import TrainingWorker
-from PyQtCustom import CustomButton, add_to_layout, create_circle_label, create_slider_layout
-from StockGraph import StockGraph
+from data_control import UpdateManager, abs_file, validate_ticker
+from profile_gui import ProfileWindow
+from profile_management import DataManager, Profile
+from predictor import TrainingWorker
+from custom_widgets import CustomButton, add_to_layout, create_circle_label, create_slider_layout
+from stock_graph import StockGraph
 
 ############################################################################
 

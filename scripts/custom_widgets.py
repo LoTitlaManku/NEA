@@ -15,8 +15,8 @@ from scripts.config import ICON_DIR
 
 # Type hinting imports
 if TYPE_CHECKING:
-    from HomeGui import MainWindow
-    from ProfileGui import ProfileWindow
+    from default_gui import MainWindow
+    from profile_gui import ProfileWindow
 
 ############################################################################
 

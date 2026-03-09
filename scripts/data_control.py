@@ -215,11 +215,8 @@ class UpdateWorker(QThread):
                 direction = row['Direction']
 
                 # Check if the prediction is correct
-                direction_correct = (
-                    True if (("UP" in direction and actual_price > start_price)
-                         or ("DOWN" in direction and actual_price < start_price))
-                    else False
-                )
+                direction_correct = (("UP" in direction and actual_price > start_price)
+                                     or ("DOWN" in direction and actual_price < start_price))
                 price_accurate = abs(actual_price - pred_price) / actual_price <= 0.02
 
                 # Update validation fields in the records as integers for pandas datatype consistency

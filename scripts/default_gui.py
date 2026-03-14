@@ -302,12 +302,18 @@ class MainWindow(QMainWindow):
     # Helper function to start prediction
     def predict(self) -> None:
         # Get ticker and interval
-        ticker = self.ticker_pd_input.text().upper()
+        ticker = self.ticker_pd_input.text().upper().strip()
+        if not ticker:
+            QMessageBox.critical(self, "Error", "Select a ticker.")
+            return
         if not validate_ticker(ticker):
             QMessageBox.critical(self, "Error", "Invalid ticker")
             return
 
         interval = next((btn.name for btn in self.btns["pd_type_btns"] if btn.isChecked()), None)
+        if interval is None:
+            QMessageBox.critical(self, "Error", "Please select a valid interval.")
+            return
         for btn in self.btns["pd_type_btns"]: btn.reset()
 
         # Disable frame for inputs while prediction is being processed

@@ -33,7 +33,8 @@ def load_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
         return df
 
     # Download the appropriate data from yahoo finance elsewise
-    try: data = yf.download(ticker, period="max", interval=interval, progress=False, auto_adjust=False)
+    period = "max" if interval == "1d" else ("60d" if interval == "15m" else "730d")
+    try: data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=False)
     except: return None
     if data.empty: return None
 

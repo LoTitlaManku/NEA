@@ -26,7 +26,7 @@ os.environ["LOKY_MAX_CPU_COUNT"] = "1"
 warnings.filterwarnings("ignore")
 
 # Custom imports
-from data_control import load_data
+from scripts.data_control import load_data
 from scripts.config import LEDGER_DIR, MODEL_DIR
 
 ############################################################################

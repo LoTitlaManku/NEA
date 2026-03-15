@@ -164,5 +164,3 @@ class DataManager:
         return True
 
 ############################################################################
-
-print(bcrypt.checkpw("Password".encode('utf-8'), b"$2b$12$N6/CAhisgzrQwMAQAFc9J.S8UhyHs/WJgbGdxAqK0lQVyeZBHzIW2"))

@@ -2,13 +2,14 @@
 # Standard library imports
 import json
 import os
+from pathlib import Path
 
 # External library imports
 import bcrypt
 from cryptography.fernet import Fernet
 
 # Custom imports
-from scripts.config import DATA_DIR
+from scripts.config import DATA_DIR, ICON_DIR
 
 ############################################################################
 
@@ -157,6 +158,11 @@ class DataManager:
         # Remove entries for that username in keys and data
         self.__keys.pop(profile.get_username(), None)
         self.__profile_datas.pop(profile.get_username(), None)
+
+        # Remove profile icon if it exists
+        for file_path in Path(ICON_DIR).glob(f"{profile.get_username()}.*"):
+            if file_path.is_file():
+                file_path.unlink()
 
         # Save files without removed data
         self.save_encrypt_file(self.__key_file, self.__keys, self.__master_key)

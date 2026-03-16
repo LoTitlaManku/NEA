@@ -259,10 +259,13 @@ class MainWindow(QMainWindow):
         if not ok: return
 
         # Ensure username & password meet length requirements and don't contain illegal characters
-        if (not all(6 <= len(word) <= 64 for word in [username, password]) or
-            not all(char for char in username if char.isalnum() or char in ["-", "_"])):
-            QMessageBox.critical(self, "Error", "Username, password is too short or contains an illegal character.")
-            return
+        for label, value in [("Username", username), ("Password", password)]:
+            if not (6 <= len(value) <= 64):
+                QMessageBox.critical(self, "Error", f"{label} must be between 6 and 64 characters.")
+                return
+            if not all(char.isalnum() or char in ["-", "_"] for char in value):
+                QMessageBox.critical(self, "Error", f"{label} cannot contain special characters.")
+                return
 
         result = self.data_manager.get_profile(username, password)
         # Set status to logged in upon success, and rebuild right frame to update with user information
